@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from collections import Counter
 import concurrent.futures
 import hashlib
 import html
@@ -35,7 +36,7 @@ from blog_pdf import audit_pdf, markdown_to_pdf
 
 API_BASE = "https://openrouter.ai/api/v1"
 SCHEMA_VERSION = 1
-PIPELINE_VERSION = "2026-08-02.1"
+PIPELINE_VERSION = "2026-08-02.2"
 DEFAULT_ANALYST = "google/gemini-3.1-pro-preview"
 DEFAULT_WRITER = "anthropic/claude-opus-4.6"
 DEFAULT_CRITIC = "google/gemini-3.1-pro-preview"
@@ -592,6 +593,87 @@ def package_markdown_assets(article: str, source_root: Path, final_dir: Path) ->
     return copied
 
 
+def translate_markdown(client: OpenRouter, article: str, model: str, *,
+                       stage: str = "translate-english", issues: list[str] | None = None) -> str:
+    repair = ""
+    if issues:
+        repair = "\nThe previous translation failed these checks; correct every item:\n- " + "\n- ".join(issues)
+    prompt = f"""You are a senior bilingual editor specializing in AI systems and performance engineering.
+Translate the complete Chinese Markdown article below into publication-quality technical English.{repair}
+
+Hard requirements:
+- Translate faithfully without summarizing, omitting, inventing, or changing technical claims.
+- Preserve the Markdown structure, heading levels, tables, lists, block quotes, code fences, formulas,
+  numbers, units, model/API identifiers, and PPT page references.
+- Preserve every image target path byte-for-byte. Translate image alt text and captions, but never the
+  path inside `](...)`.
+- Use idiomatic technical English and consistent terminology. Explain no translation choices.
+- Return only the complete Markdown document, without an outer code fence.
+
+Source Markdown:
+{article}
+"""
+    return client.chat(stage=stage, model=model, messages=[{"role": "user", "content": prompt}],
+                       max_tokens=40000, reasoning="high", temperature=0.1)
+
+
+def translation_qa(source: str, translated: str) -> dict[str, Any]:
+    """Verify that translation did not damage publishable Markdown or factual anchors."""
+    source_images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", source)
+    translated_images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", translated)
+    source_headings = [len(level) for level in re.findall(r"^(#{1,6})\s+", source, re.M)]
+    translated_headings = [len(level) for level in re.findall(r"^(#{1,6})\s+", translated, re.M)]
+
+    def numbers(value: str) -> list[str]:
+        # Ignore Markdown image filenames so their page numbers are checked by image-path equality.
+        value = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", value)
+        # Ignore generated section/list numbering; it is presentation structure, not a factual anchor.
+        value = re.sub(r"(?m)^\s*(?:#{1,6}\s+)?\d+[.)：:]\s+", "", value)
+        value = value.replace(r"\,", ",")
+        tokens = re.findall(
+            r"(?<![A-Za-z0-9])(?:\d{1,3}(?:[ ,]\d{3})+|\d+(?:[,.]\d+)*)"
+            r"(?:\s*[kK])?(?:%|[A-Za-z]+/s|[A-Za-z]+)?",
+            value,
+        )
+        normalized: list[str] = []
+        for token in tokens:
+            compact = token.replace(",", "").replace(" ", "")
+            match = re.fullmatch(r"(\d+(?:\.\d+)?)[kK]", compact)
+            if match:
+                compact = str(int(float(match.group(1)) * 1000))
+            normalized.append(compact.lower())
+        return normalized
+
+    source_numbers = Counter(numbers(source))
+    translated_numbers = Counter(numbers(translated))
+    missing_numbers = list((source_numbers - translated_numbers).elements())
+    additional_numbers = list((translated_numbers - source_numbers).elements())
+    source_tables = sum(1 for line in source.splitlines() if line.lstrip().startswith("|"))
+    translated_tables = sum(1 for line in translated.splitlines() if line.lstrip().startswith("|"))
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", translated))
+    checks = {
+        "image_paths_preserved": source_images == translated_images,
+        "heading_levels_preserved": source_headings == translated_headings,
+        "code_fences_preserved": source.count("```") == translated.count("```")
+        and translated.count("```") % 2 == 0,
+        "table_rows_preserved": source_tables == translated_tables,
+        # English may spell Chinese concepts such as “half” as 50% or 2x. Extra numeric
+        # expressions are reported for review, while every explicit source number is mandatory.
+        "numeric_anchors_preserved": not missing_numbers,
+        "substantial_length": len(translated) >= max(1000, int(len(source) * 0.55)),
+        "no_untranslated_chinese": chinese_chars == 0,
+    }
+    issues = [name for name, passed in checks.items() if not passed]
+    return {
+        "pass": not issues, "checks": checks, "issues": issues,
+        "source_chars": len(source), "translated_chars": len(translated),
+        "source_images": len(source_images), "translated_images": len(translated_images),
+        "remaining_chinese_chars": chinese_chars,
+        "missing_numeric_tokens": missing_numbers,
+        "additional_numeric_tokens": additional_numbers,
+    }
+
+
 def main() -> int:
     global STYLE_PROFILE
     parser = argparse.ArgumentParser(description="把技术视频和 PPT/PDF 生成图文并茂的 Markdown 技术博客")
@@ -606,11 +688,14 @@ def main() -> int:
     parser.add_argument("--analyst-model", default=DEFAULT_ANALYST)
     parser.add_argument("--writer-model", default=DEFAULT_WRITER)
     parser.add_argument("--critic-model", default=DEFAULT_CRITIC)
+    parser.add_argument("--translation-model", default=DEFAULT_WRITER)
     parser.add_argument("--stt-model", default=DEFAULT_STT)
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--max-sections", type=int, default=8)
     parser.add_argument("--skip-slide-vision", action="store_true")
     parser.add_argument("--no-repair", action="store_true")
+    parser.add_argument("--no-english", action="store_true",
+                        help="只生成中文版，不生成英文 Markdown、DOCX 和 PDF")
     args = parser.parse_args()
 
     if not args.media.is_file():
@@ -634,7 +719,8 @@ def main() -> int:
         "schema_version": SCHEMA_VERSION, "pipeline_version": PIPELINE_VERSION,
         "media": file_fingerprint(args.media), "slides": file_fingerprint(args.slides),
         "models": {"analyst": args.analyst_model, "writer": args.writer_model,
-                   "critic": args.critic_model, "stt": args.stt_model},
+                   "critic": args.critic_model, "translation": args.translation_model,
+                   "stt": args.stt_model},
         "reference": str(args.reference_html.resolve()) if args.reference_html.exists() else None,
     }
     atomic_json(root / "run.json", manifest)
@@ -735,9 +821,42 @@ def main() -> int:
     qa["pdf"] = audit_pdf(pdf_path, expected_images=qa["image_count"])
     if not qa["pdf"]["pass"]:
         qa["pass"] = False
+
+    if not args.no_english:
+        log("  使用高性能写作模型生成英文版")
+        english = translate_markdown(client, final, args.translation_model)
+        english_qa = translation_qa(final, english)
+        if not english_qa["pass"] and not args.no_repair:
+            log(f"  英文版有 {len(english_qa['issues'])} 项结构问题，执行翻译修复")
+            english = translate_markdown(
+                client, final, args.translation_model,
+                stage="translate-english-repair", issues=english_qa["issues"],
+            )
+            english_qa = translation_qa(final, english)
+        if not english_qa["pass"]:
+            raise RuntimeError("英文翻译未通过确定性检查：" + ", ".join(english_qa["issues"]))
+        english_path = root / "final" / "blog.en.md"
+        atomic_text(english_path, english.rstrip() + "\n")
+        english_docx = root / "final" / "blog.en.docx"
+        markdown_to_docx(
+            english_path, english_docx,
+            source_label=f"Source slides: {args.slides.name}", language="en",
+        )
+        english_pdf = root / "final" / "blog.en.pdf"
+        markdown_to_pdf(
+            english_path, english_pdf,
+            source_label=f"Source slides: {args.slides.name}", language="en",
+        )
+        qa["english"] = {
+            "translation": english_qa,
+            "docx": audit_docx(english_docx),
+            "pdf": audit_pdf(english_pdf, expected_images=qa["image_count"]),
+        }
+        if not qa["english"]["docx"]["pass"] or not qa["english"]["pdf"]["pass"]:
+            qa["pass"] = False
     atomic_json(root / "final" / "qa-report.json", qa)
     status = "通过" if qa["pass"] else "需查看 qa-report.json"
-    log(f"完成（{status}）：{final_path}\nDOCX：{docx_path}\nPDF：{pdf_path}")
+    log(f"完成（{status}）：{root / 'final'}")
     return 0 if not qa["missing_images"] else 2
 
 

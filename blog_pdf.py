@@ -54,12 +54,18 @@ def _font_path(*names: str) -> Path:
     raise RuntimeError(f"找不到可用于中文 PDF 的字体：{', '.join(names)}")
 
 
-def register_fonts() -> tuple[str, str]:
-    regular_name = "BlogCJK"
-    bold_name = "BlogCJKBold"
+def register_fonts(language: str = "zh") -> tuple[str, str]:
+    if language not in {"zh", "en"}:
+        raise ValueError("language must be 'zh' or 'en'")
+    regular_name = "BlogLatin" if language == "en" else "BlogCJK"
+    bold_name = "BlogLatinBold" if language == "en" else "BlogCJKBold"
     if regular_name not in pdfmetrics.getRegisteredFontNames():
-        regular = _font_path("msyh.ttc", "simhei.ttf", "NotoSansCJK-Regular.ttc")
-        bold = _font_path("msyhbd.ttc", "simhei.ttf", "NotoSansCJK-Bold.ttc")
+        if language == "en":
+            regular = _font_path("arial.ttf", "LiberationSans-Regular.ttf")
+            bold = _font_path("arialbd.ttf", "LiberationSans-Bold.ttf")
+        else:
+            regular = _font_path("msyh.ttc", "simhei.ttf", "NotoSansCJK-Regular.ttc")
+            bold = _font_path("msyhbd.ttc", "simhei.ttf", "NotoSansCJK-Bold.ttc")
         pdfmetrics.registerFont(TTFont(regular_name, str(regular), subfontIndex=0))
         pdfmetrics.registerFont(TTFont(bold_name, str(bold), subfontIndex=0))
         pdfmetrics.registerFontFamily(regular_name, normal=regular_name, bold=bold_name,
@@ -68,6 +74,10 @@ def register_fonts() -> tuple[str, str]:
 
 
 def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
+    text = text.translate(str.maketrans({
+        "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3",
+        "✓": "check", "✗": "no",
+    }))
     text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1", text)
     text = re.sub(r"[\u2011\u2013\u2014]+", " - ", text)
     parts: list[str] = []
@@ -263,13 +273,14 @@ def _collect_list(lines: list[str], start: int, ordered: bool,
     return flow, index
 
 
-def _page_header_footer(canvas, document, *, title: str, regular: str) -> None:
+def _page_header_footer(canvas, document, *, title: str, regular: str, language: str) -> None:
     canvas.saveState()
     canvas.setFont(regular, 7.8)
     canvas.setFillColor(MUTED)
     canvas.drawString(document.leftMargin, LETTER[1] - 0.52 * inch, title[:58])
+    footer_label = "Technical Deep Dive" if language == "en" else "技术深度解析"
     canvas.drawRightString(LETTER[0] - document.rightMargin, 0.48 * inch,
-                           f"技术深度解析  ·  {canvas.getPageNumber()}")
+                           f"{footer_label}  ·  {canvas.getPageNumber()}")
     canvas.restoreState()
 
 
@@ -291,8 +302,9 @@ def _latex_to_plain(value: str) -> str:
     return value
 
 
-def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str | None = None) -> Path:
-    regular, bold = register_fonts()
+def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str | None = None,
+                    language: str = "zh") -> Path:
+    regular, bold = register_fonts(language)
     styles = _styles(regular, bold)
     markdown_path = markdown_path.resolve()
     output_path = output_path.resolve()
@@ -314,7 +326,11 @@ def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str
         story.append(Paragraph(html.escape(subtitle), styles["cover_subtitle"]))
     story.extend([
         Spacer(1, 0.45 * inch),
-        Paragraph("基于技术演讲与配套材料整理", styles["cover_meta"]),
+        Paragraph(
+            "Synthesized from a technical talk and its accompanying slides"
+            if language == "en" else "基于技术演讲与配套材料整理",
+            styles["cover_meta"],
+        ),
     ])
     if source_label:
         story.append(Paragraph(html.escape(source_label), styles["cover_meta"]))
@@ -413,7 +429,7 @@ def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str
         story,
         onFirstPage=_first_page,
         onLaterPages=lambda canvas, doc: _page_header_footer(
-            canvas, doc, title=title, regular=regular
+            canvas, doc, title=title, regular=regular, language=language
         ),
     )
     return output_path
@@ -460,6 +476,8 @@ if __name__ == "__main__":
     cli.add_argument("markdown", type=Path)
     cli.add_argument("output", type=Path)
     cli.add_argument("--source-label")
+    cli.add_argument("--language", choices=["zh", "en"], default="zh")
     args = cli.parse_args()
-    markdown_to_pdf(args.markdown, args.output, source_label=args.source_label)
+    markdown_to_pdf(args.markdown, args.output, source_label=args.source_label,
+                    language=args.language)
     print(json.dumps(audit_pdf(args.output), ensure_ascii=False, indent=2))

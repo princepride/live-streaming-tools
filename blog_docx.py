@@ -403,7 +403,7 @@ def _configure_styles(document: Document) -> tuple[int, int]:
     return _make_numbering(document, "bullet"), _make_numbering(document, "decimal")
 
 
-def _configure_section(document: Document, title: str) -> None:
+def _configure_section(document: Document, title: str, language: str) -> None:
     section = document.sections[0]
     section.page_width = Twips(PAGE_WIDTH_DXA)
     section.page_height = Twips(PAGE_HEIGHT_DXA)
@@ -425,7 +425,8 @@ def _configure_section(document: Document, title: str) -> None:
     footer = section.footer
     footer_p = footer.paragraphs[0]
     footer_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    label = footer_p.add_run("技术深度解析  ·  ")
+    footer_label = "Technical Deep Dive" if language == "en" else "技术深度解析"
+    label = footer_p.add_run(f"{footer_label}  ·  ")
     set_run_font(label, size=9, color=MUTED)
     _add_page_field(footer_p)
 
@@ -445,7 +446,8 @@ def _extract_title(lines: list[str]) -> tuple[str, str, list[str]]:
     return title, subtitle, remaining
 
 
-def _add_cover(document: Document, title: str, subtitle: str, source_label: str | None) -> None:
+def _add_cover(document: Document, title: str, subtitle: str, source_label: str | None,
+               language: str) -> None:
     spacer = document.add_paragraph()
     spacer.paragraph_format.space_before = Pt(118)
     spacer.paragraph_format.space_after = Pt(0)
@@ -474,7 +476,11 @@ def _add_cover(document: Document, title: str, subtitle: str, source_label: str 
     descriptor.alignment = WD_ALIGN_PARAGRAPH.CENTER
     descriptor.paragraph_format.space_before = Pt(42)
     descriptor.paragraph_format.space_after = Pt(8)
-    run = descriptor.add_run("基于技术演讲与配套材料整理")
+    descriptor_text = (
+        "Synthesized from a technical talk and its accompanying slides"
+        if language == "en" else "基于技术演讲与配套材料整理"
+    )
+    run = descriptor.add_run(descriptor_text)
     set_run_font(run, size=10.5, color=MUTED, italic=True)
     if source_label:
         source_p = document.add_paragraph()
@@ -525,7 +531,10 @@ def _parse_table(lines: list[str], start: int) -> tuple[list[list[str]], int]:
     return rows, index
 
 
-def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: str | None = None) -> Path:
+def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: str | None = None,
+                     language: str = "zh") -> Path:
+    if language not in {"zh", "en"}:
+        raise ValueError("language must be 'zh' or 'en'")
     markdown_path = markdown_path.resolve()
     output_path = output_path.resolve()
     lines = markdown_path.read_text(encoding="utf-8").splitlines()
@@ -533,8 +542,8 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
 
     document = Document()
     bullet_num, decimal_num = _configure_styles(document)
-    _configure_section(document, title)
-    _add_cover(document, title, subtitle, source_label)
+    _configure_section(document, title, language)
+    _add_cover(document, title, subtitle, source_label, language)
 
     index = 0
     body_paragraph_count = 0
@@ -602,7 +611,10 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
 
     properties = document.core_properties
     properties.title = title
-    properties.subject = subtitle or "技术视频与 PPT 整理的技术博客"
+    properties.subject = subtitle or (
+        "Technical blog synthesized from a video and slide deck"
+        if language == "en" else "技术视频与 PPT 整理的技术博客"
+    )
     properties.author = "Technical Blog Pipeline"
     properties.keywords = "technical blog, video, PPT, AI systems"
     properties.comments = "Generated from user-provided media and slides."
@@ -663,5 +675,7 @@ if __name__ == "__main__":
     cli.add_argument("markdown", type=Path)
     cli.add_argument("output", type=Path)
     cli.add_argument("--source-label")
+    cli.add_argument("--language", choices=["zh", "en"], default="zh")
     values = cli.parse_args()
-    markdown_to_docx(values.markdown, values.output, source_label=values.source_label)
+    markdown_to_docx(values.markdown, values.output, source_label=values.source_label,
+                     language=values.language)

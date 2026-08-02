@@ -16,7 +16,7 @@ tmp/
 
 # Generated pipeline caches and outputs
 .*_cache_*/
-tech_blog_output/
+tech_blog_output/**
 bilibili_audio/
 references/
 
@@ -25,8 +25,20 @@ references/
 *.txt
 !requirements.txt
 *.md
+!README.md
 *.docx
 *.pdf
+
+# Publishable blog artifacts (keep caches, drafts, manifests, and QA reports ignored)
+!tech_blog_output/**/
+!tech_blog_output/**/final/blog.md
+!tech_blog_output/**/final/blog.docx
+!tech_blog_output/**/final/blog.pdf
+!tech_blog_output/**/final/blog.en.md
+!tech_blog_output/**/final/blog.en.docx
+!tech_blog_output/**/final/blog.en.pdf
+!tech_blog_output/**/final/assets/
+!tech_blog_output/**/final/assets/**
 
 # Source media and extracted audio
 *.mp4

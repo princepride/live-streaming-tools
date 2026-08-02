@@ -1,0 +1,232 @@
+# Stream Tools
+
+一套面向技术视频的本地自动化工具，主要完成三类任务：
+
+1. 为单个视频或音频生成适用于 B 站的章节信息。
+2. 使用 BBDown 批量下载 B 站合集音频，并逐个生成章节。
+3. 将技术视频和配套 PPT/PDF 整理成图文技术博客，同时输出中英文 Markdown、DOCX 和 PDF。
+
+生成过程通过 OpenRouter 调用语音转写、材料分析和写作模型。API 密钥只从环境变量读取，不会写入项目文件。
+
+## 环境准备
+
+### 必需软件
+
+- Python 3.10 或更高版本
+- `ffmpeg` 和 `ffprobe`，并确保可以从命令行直接调用
+- OpenRouter API 密钥
+- 批量下载 B 站合集时还需要 [BBDown](https://github.com/nilaoda/BBDown)
+
+### 安装 Python 依赖
+
+在项目目录执行：
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+### 配置 OpenRouter
+
+PowerShell 当前窗口中设置：
+
+```powershell
+$env:OPENROUTER_API_KEY = "你的 OpenRouter API 密钥"
+```
+
+不要把真实密钥写进脚本、README、`.env` 或 Git 提交。如果密钥曾经公开，请及时在 OpenRouter 后台轮换。
+
+## 使用方式
+
+### 1. 单个视频或音频自动分章节
+
+```powershell
+python auto_chapters.py "D:\video.mp4"
+```
+
+脚本默认保证：
+
+- 最多 10 个章节
+- 每个章节标题最多 16 个字符
+- 章节颗粒度通常为 6—10 分钟
+- 输出 B 站可直接使用的时间范围、标题和内容说明
+
+指定输出位置或修改颗粒度：
+
+```powershell
+python auto_chapters.py "D:\video.mp4" `
+  -o "D:\chapters\video_chapters.json" `
+  --min-minutes 5 `
+  --max-minutes 9 `
+  --max-chapters 10 `
+  --max-title-chars 16
+```
+
+输出包括：
+
+- `*_chapters.json`：结构化章节数据
+- `*_chapters.txt`：便于复制到 B 站的章节文本
+- `*_chapters_transcript.json`：带时间戳的完整转写，可供博客流程复用
+
+默认模型：
+
+- 转写：`openai/gpt-4o-mini-transcribe`
+- 章节规划：`google/gemini-3.1-pro-preview`
+
+可以通过 `--stt-model` 和 `--chapter-model` 替换。
+
+### 2. 批量下载 B 站合集音频并分章节
+
+```powershell
+python batch_bilibili_chapters.py `
+  --mid "189708420" `
+  --sid "8336139" `
+  --bbdown "C:\Tools\BBDown\BBDown.exe" `
+  --output-dir "D:\bilibili_audio"
+```
+
+其中：
+
+- `mid` 是 UP 主 ID。
+- `sid` 是合集 ID，可从合集网址的 `sid` 参数获得。
+- `--bbdown` 必须指向本机的 `BBDown.exe`。
+- 已成功下载和分章的项目默认会跳过，可安全地重新运行。
+
+常用模式：
+
+```powershell
+# 只下载音频
+python batch_bilibili_chapters.py --download-only
+
+# 不重新下载，只处理现有音频
+python batch_bilibili_chapters.py --chapters-only
+
+# 复用转写缓存，强制重新规划章节
+python batch_bilibili_chapters.py --force-chapters
+```
+
+### 3. 技术视频与 PPT 自动生成技术博客
+
+当前版本要求配套幻灯片为 PDF；如果手里是 PPT/PPTX，请先导出为 PDF。
+
+```powershell
+python tech_blog_pipeline.py `
+  "D:\video.mp4" `
+  "D:\slides.pdf" `
+  -o "D:\stream-tools\tech_blog_output\my_blog"
+```
+
+如果已经通过分章脚本获得转写，建议直接复用，避免重复转写和调用费用：
+
+```powershell
+python tech_blog_pipeline.py `
+  "D:\video.mp4" `
+  "D:\slides.pdf" `
+  --transcript-json "D:\video_chapters_transcript.json" `
+  -o "D:\stream-tools\tech_blog_output\my_blog" `
+  --workers 3 `
+  --max-sections 8
+```
+
+博客流水线依次执行：
+
+1. 提取 PDF 文本并渲染高清页面图。
+2. 转写视频，或读取已有的时间戳转写。
+3. 多模态分析幻灯片中的架构、数据流、数字和限制条件。
+4. 建立带视频时间段和 PPT 页码的事实台账。
+5. 规划 6—9 节具有因果关系的文章结构。
+6. 分节写作、全局编辑、独立审稿和问题修复。
+7. 生成中文版 Markdown、DOCX 和 PDF。
+8. 翻译完整 Markdown，核对结构、图片路径、表格和数字后，生成英文 DOCX 和 PDF。
+
+默认模型：
+
+- 材料分析、大纲和审稿：`google/gemini-3.1-pro-preview`
+- 写作、总编和英文翻译：`anthropic/claude-opus-4.6`
+- 语音转写：`openai/gpt-4o-mini-transcribe`
+
+模型可分别通过 `--analyst-model`、`--writer-model`、`--critic-model`、`--translation-model` 和 `--stt-model` 替换。只需要中文版时加 `--no-english`。
+
+### 4. 单独转换 Markdown
+
+已有符合项目格式的图文 Markdown 时，可以单独生成文档：
+
+```powershell
+python blog_docx.py "blog.md" "blog.docx" --language zh
+python blog_pdf.py "blog.md" "blog.pdf" --language zh
+
+python blog_docx.py "blog.en.md" "blog.en.docx" --language en
+python blog_pdf.py "blog.en.md" "blog.en.pdf" --language en
+```
+
+Markdown 中的本地图片路径应相对于 Markdown 文件所在目录。
+
+## 项目目录
+
+```text
+stream-tools/
+├─ auto_chapters.py              单个视频或音频自动分章节
+├─ batch_bilibili_chapters.py    B 站合集批量下载与分章节
+├─ tech_blog_pipeline.py         技术博客主流水线
+├─ blog_docx.py                  Markdown 转 DOCX 及完整性检查
+├─ blog_pdf.py                   Markdown 转 PDF 及完整性检查
+├─ requirements.txt              Python 依赖
+├─ references/                   可选的写作风格参考，仅用于抽象结构规则
+├─ bilibili_audio/               批量下载的音频及章节结果，默认不提交 Git
+├─ tech_blog_output/             技术博客工作区与最终结果
+├─ tmp/                          页面渲染等临时检查文件，默认不提交 Git
+└─ README.md                     本使用手册
+```
+
+## 博客输出目录
+
+每篇博客拥有独立目录：
+
+```text
+tech_blog_output/<项目名>/
+├─ assets/slides/                从 PDF 提取的高清页面图
+├─ cache/                        转写、视觉分析、事实台账和模型响应缓存
+├─ drafts/                       分节草稿、拼接稿和编辑稿
+├─ final/
+│  ├─ blog.md                    中文 Markdown
+│  ├─ blog.docx                  中文 Word 文档
+│  ├─ blog.pdf                   中文 PDF
+│  ├─ blog.en.md                 英文 Markdown
+│  ├─ blog.en.docx               英文 Word 文档
+│  ├─ blog.en.pdf                英文 PDF
+│  ├─ assets/slides/             成稿配套图片
+│  ├─ qa-report.json             自动质量检查报告
+│  └─ sources.json               输入文件和模型记录
+└─ run.json                      本次运行清单
+```
+
+Git 默认只允许提交 `final` 下的中英文博客和配套图片；缓存、草稿、媒体文件、转写和临时检查文件仍会被忽略。
+
+## 缓存与断点续跑
+
+耗时的转写、幻灯片分析和模型调用都带有内容哈希缓存。同一输入和配置重新运行时会优先读取缓存。因此任务中断后，通常直接重新执行原命令即可继续。
+
+修改输入文件、模型、提示词版本或关键参数时，会产生新的缓存项。需要完全重新分章时可使用 `--force-chapters`；博客流水线的缓存位于对应输出目录的 `cache/` 中。
+
+## 常见问题
+
+### Markdown 能打开，但图片不显示
+
+必须同时保留 Markdown 和它旁边的 `assets/slides/` 目录，并保持相对路径不变。不要只复制单独的 `.md` 文件。
+
+### 提示找不到 ffmpeg
+
+安装 ffmpeg，并把包含 `ffmpeg.exe` 和 `ffprobe.exe` 的目录加入系统 `PATH`，然后重新打开终端。
+
+### 批量下载时提示找不到 BBDown
+
+通过 `--bbdown` 显式传入 `BBDown.exe` 的完整路径。项目中的默认路径仅适用于最初配置这套工具的电脑。
+
+### 如何查看全部参数
+
+```powershell
+python auto_chapters.py --help
+python batch_bilibili_chapters.py --help
+python tech_blog_pipeline.py --help
+python blog_docx.py --help
+python blog_pdf.py --help
+```
