@@ -106,7 +106,7 @@ python batch_bilibili_chapters.py --force-chapters
 
 ### 3. 技术视频与 PPT 自动生成技术博客
 
-当前版本要求配套幻灯片为 PDF；如果手里是 PPT/PPTX，请先导出为 PDF。
+配套幻灯片可以直接使用 PDF、PPTX 或 PPTM；传入 PowerPoint 文件时，脚本会自动渲染并缓存页面，无需手工导出 PDF。
 
 ```powershell
 python tech_blog_pipeline.py `
@@ -176,6 +176,29 @@ live-streaming-tools/
 ├─ tmp/                          页面渲染等临时检查文件，默认不提交 Git
 └─ README.md                     本使用手册
 ```
+
+## 视频、课件与博客索引
+
+- [B 站合集：vLLM 小课堂](https://space.bilibili.com/189708420/lists?sid=8336139)
+- [Google Drive 课件总目录](https://drive.google.com/drive/folders/1YQ3C025p5DzNPLaxa_dQ10P7hnfcqcp8)
+
+尚未生成博客的期数会将“博客文件夹”留空。
+
+| 期数 | 主题 | B 站视频 | PPT / 资料 | 博客文件夹 |
+|---:|---|---|---|---|
+| 1 | 如何在 vLLM 中接入一个模型 | [BV1gYL965ERP](https://www.bilibili.com/video/BV1gYL965ERP) | [vLLM 模型接入指南](https://drive.google.com/file/d/13Iqs2X1CkWLtCbtCUB5bSUPX_bsBZ6IF/view) | |
+| 2 | 大家一起来学 DeepSeek-v4 | [BV17iJF67EaY](https://www.bilibili.com/video/BV17iJF67EaY) | [vLLM DSV4 Internals](https://drive.google.com/file/d/1TtHKTRkL30DngRFmILVSTKriH9h68yJG/view) | |
+| 3 | 一个 Request 的完整旅程 | [BV1yrJH6pEFQ](https://www.bilibili.com/video/BV1yrJH6pEFQ) | [配套资料目录](https://drive.google.com/drive/folders/19ev33HDcBC_1Cu5x78AjUWsZB33bJeox) | |
+| 4 | PCP 与 DCP 详解 | [BV1W1L96KEf5](https://www.bilibili.com/video/BV1W1L96KEf5) | [CP-Viz 资料目录](https://drive.google.com/drive/folders/1rB8y5eBGRJDa3SXaHo_U1FjKaeUjEeMw) | |
+| 5 | Rust 前端重构 | [BV19fJJ6AE6W](https://www.bilibili.com/video/BV19fJJ6AE6W) | [vLLM Rust Frontend Introduction](https://drive.google.com/file/d/14cm6XyvY4dQjuBeY2pCn28macviA4PWx/view) | |
+| 6 | 昇腾部署 GLM-5 指南 | [BV1eoJJ6eEUv](https://www.bilibili.com/video/BV1eoJJ6eEUv) | [GLM-5 优化](https://drive.google.com/file/d/1-j3saiDcRuFyPjsDexGDAWN58fU-JvsO/view) | |
+| 7 | AutoRound 加速 LLM/VLM 低比特量化部署 | [BV1etjE69Efx](https://www.bilibili.com/video/BV1etjE69Efx) | [配套资料目录](https://drive.google.com/drive/folders/1d0kx6WTJ-KHDMVjCsGvT64H4urwDL7_h) | |
+| 8 | veRL-Omni：多模态大模型强化学习 | [BV1qd7n6TEZk](https://www.bilibili.com/video/BV1qd7n6TEZk) | [veRL-Omni Slides](https://drive.google.com/file/d/1T534U3IEK5RzebGZ6sdhLQQ2tXH-pSho/view) | |
+| 9 | 当 vLLM 遇见 slime | [BV1LGMP6FEQa](https://www.bilibili.com/video/BV1LGMP6FEQa) | [RL Support in vLLM](https://drive.google.com/file/d/1tWhFjUy31CNHqaXp4_zvwt2pKJlvu09L/view) | |
+| 10 | KV Connector 的前世今生 | [BV1gRNF6PEc3](https://www.bilibili.com/video/BV1gRNF6PEc3) | [vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view) | |
+| 11 | 让长序列 MoE RL 训练更好调 | [BV1WLKw6aEDq](https://www.bilibili.com/video/BV1WLKw6aEDq) | [配套讲义](https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view) | |
+| 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [dspark_speculative_decoding](./tech_blog_output/dspark_speculative_decoding/final/) |
+| 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](./tech_blog_output/kimi_k3_vllm/final/) |
 
 ## 博客输出目录
 

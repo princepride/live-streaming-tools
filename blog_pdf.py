@@ -75,8 +75,9 @@ def register_fonts(language: str = "zh") -> tuple[str, str]:
 
 def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
     text = text.translate(str.maketrans({
-        "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3",
-        "✓": "check", "✗": "no",
+        "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3", "₄": "_4",
+        "①": "1)", "②": "2)", "③": "3)", "④": "4)",
+        "✓": "check", "✗": "no", "～": "~",
     }))
     text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1", text)
     text = re.sub(r"[\u2011\u2013\u2014]+", " - ", text)

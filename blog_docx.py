@@ -525,7 +525,11 @@ def _parse_table(lines: list[str], start: int) -> tuple[list[list[str]], int]:
     index = start
     while index < len(lines) and lines[index].strip().startswith("|"):
         values = [cell.strip() for cell in lines[index].strip().strip("|").split("|")]
-        if not all(re.fullmatch(r":?-{3,}:?", value.replace(" ", "")) for value in values):
+        # Be lenient with model-generated Markdown. Some translations emit a
+        # single dash in a narrow alignment cell (for example ``|:-:|``),
+        # which is semantically still a table separator even though CommonMark
+        # normally expects at least three dashes.
+        if not all(re.fullmatch(r":?-+:?", value.replace(" ", "")) for value in values):
             rows.append(values)
         index += 1
     return rows, index

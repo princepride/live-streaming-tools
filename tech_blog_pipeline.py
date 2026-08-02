@@ -23,6 +23,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +38,7 @@ from blog_pdf import audit_pdf, markdown_to_pdf
 
 API_BASE = "https://openrouter.ai/api/v1"
 SCHEMA_VERSION = 1
-PIPELINE_VERSION = "2026-08-02.2"
+PIPELINE_VERSION = "2026-08-02.3"
 DEFAULT_ANALYST = "google/gemini-3.1-pro-preview"
 DEFAULT_WRITER = "anthropic/claude-opus-4.6"
 DEFAULT_CRITIC = "google/gemini-3.1-pro-preview"
@@ -232,13 +234,100 @@ class OpenRouter:
         return sorted(result, key=lambda x: x["start"])
 
 
-def ingest_pdf(pdf: Path, root: Path) -> list[dict[str, Any]]:
+def _pptx_slide_texts(pptx: Path) -> list[str]:
+    """Extract visible slide text in presentation order without requiring Office."""
+    p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    r_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    with zipfile.ZipFile(pptx) as archive:
+        presentation = ET.fromstring(archive.read("ppt/presentation.xml"))
+        relationships = ET.fromstring(archive.read("ppt/_rels/presentation.xml.rels"))
+        targets = {
+            item.get("Id", ""): item.get("Target", "")
+            for item in relationships.findall(f"{{{rel_ns}}}Relationship")
+        }
+        result: list[str] = []
+        slide_ids = presentation.findall(f".//{{{p_ns}}}sldId")
+        for slide_id in slide_ids:
+            target = targets.get(slide_id.get(f"{{{r_ns}}}id", ""), "")
+            if not target:
+                result.append("")
+                continue
+            member = "ppt/" + target.lstrip("/").replace("../", "")
+            slide = ET.fromstring(archive.read(member))
+            values = [node.text or "" for node in slide.findall(f".//{{{a_ns}}}t")]
+            result.append("\n".join(value.strip() for value in values if value.strip()))
+    return result
+
+
+def _presentation_renderer() -> Path:
+    base = Path.home() / ".codex" / "plugins" / "cache" / "openai-primary-runtime" / "presentations"
+    candidates = sorted(base.glob("*/skills/presentations/container_tools/render_slides.py"), reverse=True)
+    if not candidates:
+        raise RuntimeError(
+            "找不到 PPTX 渲染组件。请安装 LibreOffice 后先导出 PDF，或在 Codex 环境中运行。"
+        )
+    return candidates[0]
+
+
+def prepare_slides(slides: Path, root: Path) -> tuple[Path, list[str] | None]:
+    """Accept PDF directly, or render a PPTX to a cached image-backed PDF."""
+    if slides.suffix.lower() == ".pdf":
+        return slides, None
+    if slides.suffix.lower() not in {".pptx", ".ppsx", ".potx", ".pptm", ".ppsm", ".potm"}:
+        raise RuntimeError("幻灯片必须是 PDF、PPTX、PPSX、POTX、PPTM、PPSM 或 POTM")
+
+    fingerprint = file_fingerprint(slides)
+    key = stable_hash({"slides": fingerprint, "renderer": "artifact-tool-1600x900"})[:20]
+    cache_dir = root / "cache" / "pptx" / key
+    pdf_path = cache_dir / "slides.pdf"
+    texts_path = cache_dir / "slide_texts.json"
+    if pdf_path.is_file() and texts_path.is_file():
+        return pdf_path, json.loads(texts_path.read_text(encoding="utf-8"))["texts"]
+
+    render_dir = cache_dir / "rendered"
+    render_dir.mkdir(parents=True, exist_ok=True)
+    command = [
+        sys.executable, str(_presentation_renderer()), str(slides.resolve()),
+        "--output_dir", str(render_dir.resolve()), "--width", "1600", "--height", "900",
+    ]
+    process = subprocess.run(
+        command, cwd=str(Path.home()), capture_output=True, text=True, encoding="utf-8"
+    )
+    if process.returncode:
+        raise RuntimeError(process.stderr.strip() or "PPTX 渲染失败")
+    images = sorted(
+        render_dir.glob("slide-*.png"),
+        key=lambda path: int(re.search(r"(\d+)$", path.stem).group(1)),
+    )
+    if not images:
+        raise RuntimeError("PPTX 渲染没有生成页面图片")
+
+    document = fitz.open()
+    for image_path in images:
+        with Image.open(image_path) as image:
+            width, height = image.size
+        page_width = 720.0
+        page = document.new_page(width=page_width, height=page_width * height / width)
+        page.insert_image(page.rect, filename=str(image_path))
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(pdf_path, deflate=True)
+    document.close()
+    texts = _pptx_slide_texts(slides)
+    if len(texts) != len(images):
+        raise RuntimeError(f"PPTX 文字页数 ({len(texts)}) 与渲染页数 ({len(images)}) 不一致")
+    atomic_json(texts_path, {"fingerprint": fingerprint, "texts": texts})
+    return pdf_path, texts
+
+
+def ingest_pdf(pdf: Path, root: Path, text_override: list[str] | None = None) -> list[dict[str, Any]]:
     pages_json = root / "cache" / "pdf_pages.json"
     assets = root / "assets" / "slides"
     vision = root / "cache" / "vision_slides"
     assets.mkdir(parents=True, exist_ok=True)
     vision.mkdir(parents=True, exist_ok=True)
-    fingerprint = file_fingerprint(pdf)
+    fingerprint = {"pdf": file_fingerprint(pdf), "text_override": stable_hash(text_override)}
     if pages_json.exists():
         stored = json.loads(pages_json.read_text(encoding="utf-8"))
         if stored.get("fingerprint") == fingerprint and all((assets / f"slide-{p['page']:02d}.png").exists()
@@ -247,7 +336,7 @@ def ingest_pdf(pdf: Path, root: Path) -> list[dict[str, Any]]:
     document = fitz.open(pdf)
     pages: list[dict[str, Any]] = []
     for number, page in enumerate(document, 1):
-        text = page.get_text("text").strip()
+        text = (text_override[number - 1] if text_override else page.get_text("text")).strip()
         pix = page.get_pixmap(matrix=fitz.Matrix(2.2, 2.2), alpha=False)
         final_image = assets / f"slide-{number:02d}.png"
         pix.save(final_image)
@@ -630,14 +719,20 @@ def translation_qa(source: str, translated: str) -> dict[str, Any]:
         # Ignore generated section/list numbering; it is presentation structure, not a factual anchor.
         value = re.sub(r"(?m)^\s*(?:#{1,6}\s+)?\d+[.)：:]\s+", "", value)
         value = value.replace(r"\,", ",")
+        value = re.sub(
+            r"(\d+(?:\.\d+)?)\s*万",
+            lambda match: str(int(float(match.group(1)) * 10_000)),
+            value,
+        )
         tokens = re.findall(
             r"(?<![A-Za-z0-9])(?:\d{1,3}(?:[ ,]\d{3})+|\d+(?:[,.]\d+)*)"
-            r"(?:\s*[kK])?(?:%|[A-Za-z]+/s|[A-Za-z]+)?",
+            r"(?:\s*[kK])?(?:%|[A-Za-z]+/s|[A-Za-z]+)?(?:st|nd|rd|th)?",
             value,
         )
         normalized: list[str] = []
         for token in tokens:
             compact = token.replace(",", "").replace(" ", "")
+            compact = re.sub(r"(?<=\d)(?:st|nd|rd|th)$", "", compact, flags=re.I)
             match = re.fullmatch(r"(\d+(?:\.\d+)?)[kK]", compact)
             if match:
                 compact = str(int(float(match.group(1)) * 1000))
@@ -646,8 +741,10 @@ def translation_qa(source: str, translated: str) -> dict[str, Any]:
 
     source_numbers = Counter(numbers(source))
     translated_numbers = Counter(numbers(translated))
-    missing_numbers = list((source_numbers - translated_numbers).elements())
-    additional_numbers = list((translated_numbers - source_numbers).elements())
+    # Repetition counts may legitimately change when English consolidates adjacent sentences.
+    # Require every distinct explicit source number to remain present somewhere in the translation.
+    missing_numbers = sorted(set(source_numbers) - set(translated_numbers))
+    additional_numbers = sorted(set(translated_numbers) - set(source_numbers))
     source_tables = sum(1 for line in source.splitlines() if line.lstrip().startswith("|"))
     translated_tables = sum(1 for line in translated.splitlines() if line.lstrip().startswith("|"))
     chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", translated))
@@ -678,7 +775,7 @@ def main() -> int:
     global STYLE_PROFILE
     parser = argparse.ArgumentParser(description="把技术视频和 PPT/PDF 生成图文并茂的 Markdown 技术博客")
     parser.add_argument("media", type=Path, help="技术视频或音频")
-    parser.add_argument("slides", type=Path, help="对应 PPT 导出的 PDF")
+    parser.add_argument("slides", type=Path, help="对应的 PPTX/PPTM/PDF 幻灯片")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("tech_blog_output"))
     parser.add_argument("--transcript-json", type=Path, help="复用现有带时间戳转写 JSON")
     parser.add_argument("--style-profile", type=Path,
@@ -702,8 +799,8 @@ def main() -> int:
         parser.error(f"找不到媒体文件：{args.media}")
     if not args.slides.is_file():
         parser.error(f"找不到 PDF：{args.slides}")
-    if args.slides.suffix.lower() != ".pdf":
-        parser.error("当前版本请先把 PPT 导出为 PDF")
+    if args.slides.suffix.lower() not in {".pdf", ".pptx", ".ppsx", ".potx", ".pptm", ".ppsm", ".potm"}:
+        parser.error("幻灯片必须是 PDF、PPTX、PPSX、POTX、PPTM、PPSM 或 POTM")
     if not 6 <= args.max_sections <= 9:
         parser.error("--max-sections 必须在 6 到 9 之间")
     api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -727,7 +824,8 @@ def main() -> int:
     client = OpenRouter(api_key, root / "cache")
 
     log("[1/7] 提取并渲染 PPT")
-    pages = ingest_pdf(args.slides, root)
+    prepared_slides, slide_texts = prepare_slides(args.slides, root)
+    pages = ingest_pdf(prepared_slides, root, slide_texts)
 
     transcript_path = find_transcript(args.media, args.transcript_json)
     if transcript_path:
@@ -840,12 +938,12 @@ def main() -> int:
         english_docx = root / "final" / "blog.en.docx"
         markdown_to_docx(
             english_path, english_docx,
-            source_label=f"Source slides: {args.slides.name}", language="en",
+            source_label="Source slides: user-provided slide deck", language="en",
         )
         english_pdf = root / "final" / "blog.en.pdf"
         markdown_to_pdf(
             english_path, english_pdf,
-            source_label=f"Source slides: {args.slides.name}", language="en",
+            source_label="Source slides: user-provided slide deck", language="en",
         )
         qa["english"] = {
             "translation": english_qa,
