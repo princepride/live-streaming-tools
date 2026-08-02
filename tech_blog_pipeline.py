@@ -30,6 +30,7 @@ import requests
 from PIL import Image
 
 from blog_docx import audit_docx, markdown_to_docx
+from blog_pdf import audit_pdf, markdown_to_pdf
 
 
 API_BASE = "https://openrouter.ai/api/v1"
@@ -725,9 +726,18 @@ def main() -> int:
     qa["docx"] = audit_docx(docx_path)
     if not qa["docx"]["pass"]:
         qa["pass"] = False
+    pdf_path = root / "final" / "blog.pdf"
+    markdown_to_pdf(
+        final_path,
+        pdf_path,
+        source_label=f"配套材料：{args.slides.name}",
+    )
+    qa["pdf"] = audit_pdf(pdf_path, expected_images=qa["image_count"])
+    if not qa["pdf"]["pass"]:
+        qa["pass"] = False
     atomic_json(root / "final" / "qa-report.json", qa)
     status = "通过" if qa["pass"] else "需查看 qa-report.json"
-    log(f"完成（{status}）：{final_path}\nDOCX：{docx_path}")
+    log(f"完成（{status}）：{final_path}\nDOCX：{docx_path}\nPDF：{pdf_path}")
     return 0 if not qa["missing_images"] else 2
 
 

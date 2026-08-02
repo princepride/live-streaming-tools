@@ -23,6 +23,7 @@ references/
 # Generated reports, transcripts and documents
 *.json
 *.txt
+!requirements.txt
 *.md
 *.docx
 *.pdf
