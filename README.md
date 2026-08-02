@@ -5,9 +5,9 @@
 - [B 站合集：vLLM 小课堂](https://space.bilibili.com/189708420/lists?sid=8336139)
 - [Google Drive 课件总目录](https://drive.google.com/drive/folders/1YQ3C025p5DzNPLaxa_dQ10P7hnfcqcp8)
 
-尚未生成博客的期数会将“博客文件夹”留空。
+尚未生成博客的期数会将“博客”留空。
 
-| 期数 | 主题 | B 站视频 | PPT / 资料 | 博客文件夹 |
+| 期数 | 主题 | B 站视频 | PPT / 资料 | 博客 |
 |---:|---|---|---|---|
 | 1 | 如何在 vLLM 中接入一个模型 | [BV1gYL965ERP](https://www.bilibili.com/video/BV1gYL965ERP) | [vLLM 模型接入指南](https://drive.google.com/file/d/13Iqs2X1CkWLtCbtCUB5bSUPX_bsBZ6IF/view) | |
 | 2 | 大家一起来学 DeepSeek-v4 | [BV17iJF67EaY](https://www.bilibili.com/video/BV17iJF67EaY) | [vLLM DSV4 Internals](https://drive.google.com/file/d/1TtHKTRkL30DngRFmILVSTKriH9h68yJG/view) | |
@@ -20,8 +20,8 @@
 | 9 | 当 vLLM 遇见 slime | [BV1LGMP6FEQa](https://www.bilibili.com/video/BV1LGMP6FEQa) | [RL Support in vLLM](https://drive.google.com/file/d/1tWhFjUy31CNHqaXp4_zvwt2pKJlvu09L/view) | |
 | 10 | KV Connector 的前世今生 | [BV1gRNF6PEc3](https://www.bilibili.com/video/BV1gRNF6PEc3) | [vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view) | |
 | 11 | 让长序列 MoE RL 训练更好调 | [BV1WLKw6aEDq](https://www.bilibili.com/video/BV1WLKw6aEDq) | [配套讲义](https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view) | |
-| 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [dspark_speculative_decoding](./tech_blog_output/dspark_speculative_decoding/final/) |
-| 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](./tech_blog_output/kimi_k3_vllm/final/) |
+| 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [中文博客](./tech_blog_output/dspark_speculative_decoding/final/blog.md) |
+| 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [中文博客](./tech_blog_output/kimi_k3_vllm/final/blog.md) |
 
 一套面向技术视频的本地自动化工具，主要完成三类任务：
 
