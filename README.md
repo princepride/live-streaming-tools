@@ -1,4 +1,4 @@
-# Stream Tools
+# Live Streaming Tools
 
 一套面向技术视频的本地自动化工具，主要完成三类任务：
 
@@ -112,7 +112,7 @@ python batch_bilibili_chapters.py --force-chapters
 python tech_blog_pipeline.py `
   "D:\video.mp4" `
   "D:\slides.pdf" `
-  -o "D:\stream-tools\tech_blog_output\my_blog"
+  -o "D:\live-streaming-tools\tech_blog_output\my_blog"
 ```
 
 如果已经通过分章脚本获得转写，建议直接复用，避免重复转写和调用费用：
@@ -122,7 +122,7 @@ python tech_blog_pipeline.py `
   "D:\video.mp4" `
   "D:\slides.pdf" `
   --transcript-json "D:\video_chapters_transcript.json" `
-  -o "D:\stream-tools\tech_blog_output\my_blog" `
+  -o "D:\live-streaming-tools\tech_blog_output\my_blog" `
   --workers 3 `
   --max-sections 8
 ```
@@ -163,7 +163,7 @@ Markdown 中的本地图片路径应相对于 Markdown 文件所在目录。
 ## 项目目录
 
 ```text
-stream-tools/
+live-streaming-tools/
 ├─ auto_chapters.py              单个视频或音频自动分章节
 ├─ batch_bilibili_chapters.py    B 站合集批量下载与分章节
 ├─ tech_blog_pipeline.py         技术博客主流水线
