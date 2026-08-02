@@ -1,0 +1,45 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local agent/runtime state
+.agents/
+tmp/
+
+# Generated pipeline caches and outputs
+.*_cache_*/
+tech_blog_output/
+bilibili_audio/
+references/
+
+# Generated reports, transcripts and documents
+*.json
+*.txt
+*.md
+*.docx
+*.pdf
+
+# Source media and extracted audio
+*.mp4
+*.mkv
+*.mov
+*.webm
+*.mp3
+*.m4a
+*.wav
+*.flac
+*.aac
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
