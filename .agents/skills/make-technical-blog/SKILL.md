@@ -11,6 +11,8 @@ Work from the repository root containing `tech_blog_pipeline.py`.
 
 1. Confirm the video or audio file and slide deck exist.
 2. Accept PDF, PPTX, PPSX, POTX, PPTM, PPSM, or POTM slides. Let the pipeline render PowerPoint inputs automatically.
+   - When every PowerPoint page is a single full-slide raster image, preserve the original embedded image instead of rasterizing it again. The pipeline will focus-crop decorative whitespace for the publishable blog asset while retaining the untouched source in its cache.
+   - For other PowerPoint decks, render at the pipeline's high-resolution setting. Never upscale a previously downsampled blog asset when the source deck is available.
 3. Look for a matching `*_chapters_transcript.json` and reuse it with `--transcript-json` to avoid duplicate transcription.
 4. Choose `--provider openrouter` for the OpenRouter API or `--provider codex` for an authenticated Codex CLI. For OpenRouter, use `OPENROUTER_API_KEY` from the process environment or repository-root `.env`. For Codex, require an existing transcript JSON and never send the audio file to the model backend.
 5. Choose a unique, descriptive output folder under `tech_blog_output/`.
@@ -66,6 +68,8 @@ python .agents\skills\validate-stream-artifacts\scripts\validate_artifacts.py bl
 ```
 
 Then visually inspect every PDF page. Render both DOCX files with the document workflow when Word or LibreOffice is available; otherwise disclose that visual DOCX verification was unavailable and report the structural audit separately.
+
+During visual inspection, reject slide images whose useful chart or diagram occupies only a small fraction of the frame. Prefer a lossless crop around the evidence region, leaving enough padding for labels and legends. Confirm the cropped asset is sharper at publication width and does not remove lightly colored arrows, annotations, axes, or table cells.
 
 Require the final directory to contain Chinese Markdown, DOCX, and PDF; English equivalents unless disabled; packaged `assets/slides/`; and a passing `qa-report.json`. Ensure Markdown image links are relative and resolve inside the final directory.
 

@@ -29,7 +29,7 @@
   ],
   "docx": {
     "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.docx",
-    "size": 3097343,
+    "size": 1301599,
     "pass": true,
     "paragraphs": 366,
     "headings": 31,
@@ -44,9 +44,9 @@
   },
   "pdf": {
     "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.pdf",
-    "size": 4408237,
+    "size": 1950146,
     "pass": true,
-    "pages": 25,
+    "pages": 23,
     "encrypted": false,
     "embedded_image_xobjects": 13,
     "expected_images": 13,
@@ -77,7 +77,7 @@
     },
     "docx": {
       "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.en.docx",
-      "size": 3097670,
+      "size": 1301897,
       "pass": true,
       "paragraphs": 366,
       "headings": 31,
@@ -92,9 +92,9 @@
     },
     "pdf": {
       "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.en.pdf",
-      "size": 4007037,
+      "size": 1547982,
       "pass": true,
-      "pages": 29,
+      "pages": 26,
       "encrypted": false,
       "embedded_image_xobjects": 13,
       "expected_images": 13,

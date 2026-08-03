@@ -30,7 +30,7 @@ from typing import Any, Protocol
 
 import fitz  # PyMuPDF
 import requests
-from PIL import Image
+from PIL import Image, ImageChops
 
 from blog_docx import audit_docx, markdown_to_docx
 from blog_pdf import audit_pdf, markdown_to_pdf
@@ -417,36 +417,113 @@ def _presentation_renderer() -> Path:
     return candidates[0]
 
 
-def prepare_slides(slides: Path, root: Path) -> tuple[Path, list[str] | None]:
+def _extract_full_slide_images(slides: Path, destination: Path) -> list[Path] | None:
+    """Extract lossless full-slide raster images when the PPTX is image-backed.
+
+    Some source decks consist of one 1920x1080 PNG per slide. Rendering those
+    through another presentation/PDF raster pass only reduces sharpness. This
+    fast path preserves the author's original pixels and also works when the
+    presentation renderer is unavailable.
+    """
+    if slides.suffix.lower() not in {".pptx", ".ppsx", ".potx", ".pptm", ".ppsm", ".potm"}:
+        return None
+    rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    extracted: list[tuple[str, bytes]] = []
+    try:
+        with zipfile.ZipFile(slides) as archive:
+            presentation_xml = ET.fromstring(archive.read("ppt/presentation.xml"))
+            slide_size = presentation_xml.find(f"{{{p_ns}}}sldSz")
+            if slide_size is None:
+                return None
+            slide_width = int(slide_size.get("cx", "0"))
+            slide_height = int(slide_size.get("cy", "0"))
+            slide_members = sorted(
+                (name for name in archive.namelist()
+                 if re.fullmatch(r"ppt/slides/slide\d+\.xml", name)),
+                key=lambda name: int(re.search(r"slide(\d+)\.xml$", name).group(1)),
+            )
+            for slide_member in slide_members:
+                slide_number = int(re.search(r"slide(\d+)\.xml$", slide_member).group(1))
+                slide_xml = ET.fromstring(archive.read(slide_member))
+                pictures = slide_xml.findall(f".//{{{p_ns}}}pic")
+                if slide_xml.findall(f".//{{{a_ns}}}t") or len(pictures) != 1:
+                    return None
+                transform = pictures[0].find(f"{{{p_ns}}}spPr/{{{a_ns}}}xfrm")
+                offset = transform.find(f"{{{a_ns}}}off") if transform is not None else None
+                extent = transform.find(f"{{{a_ns}}}ext") if transform is not None else None
+                if offset is None or extent is None:
+                    return None
+                x, y = int(offset.get("x", "0")), int(offset.get("y", "0"))
+                cx, cy = int(extent.get("cx", "0")), int(extent.get("cy", "0"))
+                tolerance = 0.01
+                if (abs(x) > slide_width * tolerance or abs(y) > slide_height * tolerance
+                        or abs(cx - slide_width) > slide_width * tolerance
+                        or abs(cy - slide_height) > slide_height * tolerance):
+                    return None
+                rel_member = f"ppt/slides/_rels/slide{slide_number}.xml.rels"
+                relationships = ET.fromstring(archive.read(rel_member))
+                image_targets = [
+                    item.get("Target", "")
+                    for item in relationships.findall(f"{{{rel_ns}}}Relationship")
+                    if "/image" in item.get("Type", "")
+                ]
+                if len(image_targets) != 1:
+                    return None
+                target = image_targets[0].replace("../", "")
+                member = "ppt/" + target.lstrip("/")
+                suffix = Path(member).suffix.lower()
+                if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+                    return None
+                extracted.append((suffix, archive.read(member)))
+    except (KeyError, OSError, zipfile.BadZipFile, ET.ParseError):
+        return None
+
+    destination.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+    for number, (suffix, payload) in enumerate(extracted, 1):
+        path = destination / f"slide-{number:02d}{suffix}"
+        path.write_bytes(payload)
+        paths.append(path)
+    return paths
+
+
+def prepare_slides(slides: Path, root: Path) -> tuple[Path, list[str] | None, list[Path] | None]:
     """Accept PDF directly, or render a PPTX to a cached image-backed PDF."""
     if slides.suffix.lower() == ".pdf":
-        return slides, None
+        return slides, None, None
     if slides.suffix.lower() not in {".pptx", ".ppsx", ".potx", ".pptm", ".ppsm", ".potm"}:
         raise RuntimeError("幻灯片必须是 PDF、PPTX、PPSX、POTX、PPTM、PPSM 或 POTM")
 
     fingerprint = file_fingerprint(slides)
-    key = stable_hash({"slides": fingerprint, "renderer": "artifact-tool-1600x900"})[:20]
+    key = stable_hash({"slides": fingerprint, "renderer": "source-raster-aware-v1"})[:20]
     cache_dir = root / "cache" / "pptx" / key
     pdf_path = cache_dir / "slides.pdf"
     texts_path = cache_dir / "slide_texts.json"
+    source_images = _extract_full_slide_images(slides, cache_dir / "source-slides")
     if pdf_path.is_file() and texts_path.is_file():
-        return pdf_path, json.loads(texts_path.read_text(encoding="utf-8"))["texts"]
+        return (pdf_path, json.loads(texts_path.read_text(encoding="utf-8"))["texts"],
+                source_images)
 
-    render_dir = cache_dir / "rendered"
-    render_dir.mkdir(parents=True, exist_ok=True)
-    command = [
-        sys.executable, str(_presentation_renderer()), str(slides.resolve()),
-        "--output_dir", str(render_dir.resolve()), "--width", "1600", "--height", "900",
-    ]
-    process = subprocess.run(
-        command, cwd=str(Path.home()), capture_output=True, text=True, encoding="utf-8"
-    )
-    if process.returncode:
-        raise RuntimeError(process.stderr.strip() or "PPTX 渲染失败")
-    images = sorted(
-        render_dir.glob("slide-*.png"),
-        key=lambda path: int(re.search(r"(\d+)$", path.stem).group(1)),
-    )
+    if source_images:
+        images = source_images
+    else:
+        render_dir = cache_dir / "rendered"
+        render_dir.mkdir(parents=True, exist_ok=True)
+        command = [
+            sys.executable, str(_presentation_renderer()), str(slides.resolve()),
+            "--output_dir", str(render_dir.resolve()), "--width", "2400", "--height", "1350",
+        ]
+        process = subprocess.run(
+            command, cwd=str(Path.home()), capture_output=True, text=True, encoding="utf-8"
+        )
+        if process.returncode:
+            raise RuntimeError(process.stderr.strip() or "PPTX 渲染失败")
+        images = sorted(
+            render_dir.glob("slide-*.png"),
+            key=lambda path: int(re.search(r"(\d+)$", path.stem).group(1)),
+        )
     if not images:
         raise RuntimeError("PPTX 渲染没有生成页面图片")
 
@@ -464,16 +541,45 @@ def prepare_slides(slides: Path, root: Path) -> tuple[Path, list[str] | None]:
     if len(texts) != len(images):
         raise RuntimeError(f"PPTX 文字页数 ({len(texts)}) 与渲染页数 ({len(images)}) 不一致")
     atomic_json(texts_path, {"fingerprint": fingerprint, "texts": texts})
-    return pdf_path, texts
+    return pdf_path, texts, source_images
 
 
-def ingest_pdf(pdf: Path, root: Path, text_override: list[str] | None = None) -> list[dict[str, Any]]:
+def _focus_crop_slide(source: Image.Image) -> Image.Image:
+    """Crop decorative slide whitespace while retaining the information area."""
+    image = source.convert("RGB")
+    width, height = image.size
+    red, green, blue = image.split()
+    darkest = ImageChops.darker(ImageChops.darker(red, green), blue)
+    mask = darkest.point(lambda value: 255 if value < 180 else 0)
+    # Ignore the source slide title and tiny template footer. The blog already
+    # supplies a semantic lead-in and caption, so the central evidence can use
+    # the full document width.
+    search = mask.crop((0, int(height * 0.22), width, int(height * 0.89)))
+    bbox = search.getbbox()
+    if not bbox:
+        return image
+    left, top, right, bottom = bbox
+    top += int(height * 0.22)
+    bottom += int(height * 0.22)
+    pad_x = int(width * 0.06)
+    pad_y = int(height * 0.05)
+    crop = (max(0, left - pad_x), max(0, top - pad_y),
+            min(width, right + pad_x), min(height, bottom + pad_y))
+    if crop[2] - crop[0] < width * 0.35 or crop[3] - crop[1] < height * 0.20:
+        return image
+    return image.crop(crop)
+
+
+def ingest_pdf(pdf: Path, root: Path, text_override: list[str] | None = None,
+               source_images: list[Path] | None = None) -> list[dict[str, Any]]:
     pages_json = root / "cache" / "pdf_pages.json"
     assets = root / "assets" / "slides"
     vision = root / "cache" / "vision_slides"
     assets.mkdir(parents=True, exist_ok=True)
     vision.mkdir(parents=True, exist_ok=True)
-    fingerprint = {"pdf": file_fingerprint(pdf), "text_override": stable_hash(text_override)}
+    fingerprint = {"pdf": file_fingerprint(pdf), "text_override": stable_hash(text_override),
+                   "source_images": [file_fingerprint(path) for path in source_images or []],
+                   "asset_transform": "lossless-focus-crop-v1"}
     if pages_json.exists():
         stored = json.loads(pages_json.read_text(encoding="utf-8"))
         if stored.get("fingerprint") == fingerprint and all((assets / f"slide-{p['page']:02d}.png").exists()
@@ -483,13 +589,19 @@ def ingest_pdf(pdf: Path, root: Path, text_override: list[str] | None = None) ->
     pages: list[dict[str, Any]] = []
     for number, page in enumerate(document, 1):
         text = (text_override[number - 1] if text_override else page.get_text("text")).strip()
-        pix = page.get_pixmap(matrix=fitz.Matrix(2.2, 2.2), alpha=False)
         final_image = assets / f"slide-{number:02d}.png"
-        pix.save(final_image)
+        if source_images:
+            with Image.open(source_images[number - 1]) as original:
+                focused = _focus_crop_slide(original)
+                focused.save(final_image, "PNG", optimize=True)
+        else:
+            pix = page.get_pixmap(matrix=fitz.Matrix(3.0, 3.0), alpha=False)
+            pix.save(final_image)
         vision_image = vision / f"slide-{number:02d}.jpg"
-        with Image.open(final_image) as source:
-            source.thumbnail((1100, 700), Image.Resampling.LANCZOS)
-            source.convert("RGB").save(vision_image, "JPEG", quality=78, optimize=True)
+        if not vision_image.exists():
+            with Image.open(final_image) as source:
+                source.thumbnail((1100, 700), Image.Resampling.LANCZOS)
+                source.convert("RGB").save(vision_image, "JPEG", quality=78, optimize=True)
         pages.append({"page": number, "text": text,
                       "image": f"assets/slides/slide-{number:02d}.png",
                       "vision_image": str(vision_image)})
@@ -982,8 +1094,8 @@ def main() -> int:
         client = CodexClient(root / "cache", Path(__file__).resolve().parent, args.codex_model)
 
     log("[1/7] 提取并渲染 PPT")
-    prepared_slides, slide_texts = prepare_slides(args.slides, root)
-    pages = ingest_pdf(prepared_slides, root, slide_texts)
+    prepared_slides, slide_texts, source_images = prepare_slides(args.slides, root)
+    pages = ingest_pdf(prepared_slides, root, slide_texts, source_images)
 
     transcript_path = find_transcript(args.media, args.transcript_json)
     if transcript_path:
