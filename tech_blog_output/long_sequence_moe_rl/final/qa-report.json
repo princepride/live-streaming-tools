@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 19279,
+  "image_count": 13,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-05.png",
+    "assets/slides/slide-07.png",
+    "assets/slides/slide-09.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-17.png",
+    "assets/slides/slide-18.png",
+    "assets/slides/slide-20.png",
+    "assets/slides/slide-22.png",
+    "assets/slides/slide-23.png",
+    "assets/slides/slide-26.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.docx",
+    "size": 3097343,
+    "pass": true,
+    "paragraphs": 366,
+    "headings": 31,
+    "numbered_paragraphs": 81,
+    "tables": 10,
+    "embedded_images": 13,
+    "media_parts": 13,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.pdf",
+    "size": 4408237,
+    "pass": true,
+    "pages": 25,
+    "encrypted": false,
+    "embedded_image_xobjects": 13,
+    "expected_images": 13,
+    "pages_without_extractable_text": [],
+    "title": "32 张 H100 承载 128K MoE RL：显存解耦、通信重叠与配置收敛",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 19279,
+      "translated_chars": 49945,
+      "source_images": 13,
+      "translated_images": 13,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.en.docx",
+      "size": 3097670,
+      "pass": true,
+      "paragraphs": 366,
+      "headings": 31,
+      "numbered_paragraphs": 81,
+      "tables": 10,
+      "embedded_images": 13,
+      "media_parts": 13,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\long_sequence_moe_rl\\final\\blog.en.pdf",
+      "size": 4007037,
+      "pass": true,
+      "pages": 29,
+      "encrypted": false,
+      "embedded_image_xobjects": 13,
+      "expected_images": 13,
+      "pages_without_extractable_text": [],
+      "title": "Running 128K-Sequence MoE RL on 32 H100s: Memory Decoupling, Communication Overlap, and Configuration Convergence",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

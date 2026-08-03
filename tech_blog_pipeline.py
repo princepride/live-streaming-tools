@@ -26,7 +26,7 @@ import time
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import fitz  # PyMuPDF
 import requests
@@ -38,7 +38,7 @@ from blog_pdf import audit_pdf, markdown_to_pdf
 
 API_BASE = "https://openrouter.ai/api/v1"
 SCHEMA_VERSION = 1
-PIPELINE_VERSION = "2026-08-02.3"
+PIPELINE_VERSION = "2026-08-03.1"
 DEFAULT_ANALYST = "google/gemini-3.1-pro-preview"
 DEFAULT_WRITER = "anthropic/claude-opus-4.6"
 DEFAULT_CRITIC = "google/gemini-3.1-pro-preview"
@@ -62,6 +62,36 @@ REFERENCE_SAFETY = """参考文章只用于抽取抽象组织原则，不作为�
 
 def log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+
+
+def load_dotenv(path: Path, *, override: bool = False) -> bool:
+    """Load simple KEY=VALUE entries without logging or returning secret values."""
+    if not path.is_file():
+        return False
+
+    loaded = False
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            continue
+        if not override and key in os.environ:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ[key] = value
+        loaded = True
+    return loaded
 
 
 def atomic_text(path: Path, value: str) -> None:
@@ -234,6 +264,122 @@ class OpenRouter:
         return sorted(result, key=lambda x: x["start"])
 
 
+class ModelClient(Protocol):
+    def chat(self, *, stage: str, model: str, messages: list[dict[str, Any]],
+             max_tokens: int, reasoning: str = "high", temperature: float = 0.15,
+             schema: dict[str, Any] | None = None) -> Any: ...
+
+    def transcribe(self, media: Path, *, model: str, workers: int, chunk_seconds: int,
+                   overlap_seconds: int) -> list[dict[str, Any]]: ...
+
+
+class CodexClient:
+    """Use the authenticated Codex CLI as a non-interactive generation backend."""
+
+    def __init__(self, cache_dir: Path, workspace: Path, model: str | None = None) -> None:
+        executable = shutil.which("codex")
+        if not executable:
+            raise RuntimeError("找不到 Codex CLI；请先安装 Codex CLI")
+        self.executable = executable
+        self.cache_dir = cache_dir
+        self.workspace = workspace
+        self.model = model
+
+    @staticmethod
+    def _prompt_and_images(messages: list[dict[str, Any]], temp_dir: Path) -> tuple[str, list[Path]]:
+        prompt_parts = [
+            "你是技术博客流水线中的纯生成组件。不要调用工具、浏览网络或修改文件；"
+            "只根据下列消息内容完成任务，并把所要求的正文或 JSON 作为最终回答。"
+        ]
+        images: list[Path] = []
+        for message_index, message in enumerate(messages):
+            role = str(message.get("role", "user")).upper()
+            prompt_parts.append(f"\n<{role}>")
+            content = message.get("content", "")
+            if isinstance(content, str):
+                prompt_parts.append(content)
+                continue
+            for item_index, item in enumerate(content):
+                if item.get("type") == "text":
+                    prompt_parts.append(str(item.get("text", "")))
+                    continue
+                if item.get("type") != "image_url":
+                    continue
+                url = str(item.get("image_url", {}).get("url", ""))
+                match = re.fullmatch(r"data:image/([a-zA-Z0-9.+-]+);base64,(.+)", url, re.S)
+                if not match:
+                    raise RuntimeError("Codex 后端只接受流水线生成的内嵌图片")
+                extension = "jpg" if match.group(1).lower() in {"jpeg", "jpg"} else "png"
+                image_path = temp_dir / f"message-{message_index:02d}-{item_index:02d}.{extension}"
+                image_path.write_bytes(base64.b64decode(match.group(2), validate=True))
+                images.append(image_path)
+                prompt_parts.append(f"[附图 {len(images)}] 请结合对应图片内容分析。")
+        return "\n".join(prompt_parts), images
+
+    def chat(self, *, stage: str, model: str, messages: list[dict[str, Any]],
+             max_tokens: int, reasoning: str = "high", temperature: float = 0.15,
+             schema: dict[str, Any] | None = None) -> Any:
+        effective_model = self.model or "configured-default"
+        key_data = {
+            "pipeline": PIPELINE_VERSION, "provider": "codex", "stage": stage,
+            "model": effective_model, "messages": messages, "max_tokens": max_tokens,
+            "reasoning": reasoning, "temperature": temperature, "schema": schema,
+        }
+        key = stable_hash(key_data)
+        cache = self.cache_dir / "llm-codex" / stage / f"{key}.json"
+        if cache.exists():
+            stored = json.loads(cache.read_text(encoding="utf-8"))
+            log(f"  使用 Codex 缓存：{stage}")
+            return stored["parsed"]
+
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=f"codex-{stage}-", dir=cache.parent) as temp:
+            temp_dir = Path(temp)
+            prompt, images = self._prompt_and_images(messages, temp_dir)
+            output_path = temp_dir / "last-message.txt"
+            command = [
+                self.executable, "exec", "--ephemeral", "--ignore-rules",
+                "--sandbox", "read-only", "--color", "never",
+                "--cd", str(self.workspace),
+                "--config", f'model_reasoning_effort="{reasoning}"',
+                "--output-last-message", str(output_path),
+            ]
+            if self.model:
+                command.extend(["--model", self.model])
+            if schema:
+                schema_path = temp_dir / "output-schema.json"
+                atomic_json(schema_path, schema)
+                command.extend(["--output-schema", str(schema_path)])
+            for image_path in images:
+                command.extend(["--image", str(image_path)])
+            command.append("-")
+            child_env = os.environ.copy()
+            child_env.pop("OPENROUTER_API_KEY", None)
+            process = subprocess.run(
+                command, input=prompt, capture_output=True, text=True, encoding="utf-8",
+                cwd=self.workspace, timeout=1800, env=child_env,
+            )
+            if process.returncode:
+                detail = process.stderr.strip() or process.stdout.strip()
+                raise RuntimeError(f"Codex 阶段 {stage} 失败：{detail[-1600:]}")
+            if not output_path.is_file():
+                raise RuntimeError(f"Codex 阶段 {stage} 没有生成最终响应")
+            content = output_path.read_text(encoding="utf-8")
+
+        parsed = parse_json_text(content) if schema else strip_fence(content)
+        atomic_json(cache, {
+            "schema_version": SCHEMA_VERSION, "key": key, "provider": "codex",
+            "model": effective_model, "parsed": parsed,
+        })
+        return parsed
+
+    def transcribe(self, media: Path, *, model: str, workers: int, chunk_seconds: int,
+                   overlap_seconds: int) -> list[dict[str, Any]]:
+        raise RuntimeError(
+            "Codex 后端不直接转写音频；请提供 --transcript-json，或先运行章节流水线生成转录"
+        )
+
+
 def _pptx_slide_texts(pptx: Path) -> list[str]:
     """Extract visible slide text in presentation order without requiring Office."""
     p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -370,7 +516,7 @@ SLIDE_SCHEMA = {
 }
 
 
-def analyze_slide_batch(client: OpenRouter, pages: list[dict[str, Any]], model: str) -> list[dict[str, Any]]:
+def analyze_slide_batch(client: ModelClient, pages: list[dict[str, Any]], model: str) -> list[dict[str, Any]]:
     content: list[dict[str, Any]] = [{"type": "text", "text": """你是技术演讲材料分析员。逐页阅读图片和提取文本，输出严格 JSON。重点识别：页面在故事线中的作用、图中数据流/内存布局/时序、准确数字、实验限定条件、容易误读之处、是否值得在博客中使用。不得根据常识补全看不清的数字。"""}]
     for page in pages:
         raw = Path(page["vision_image"]).read_bytes()
@@ -488,7 +634,7 @@ def find_transcript(media: Path, explicit: Path | None) -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
-def make_evidence(client: OpenRouter, transcript: list[dict[str, Any]], pages: list[dict[str, Any]],
+def make_evidence(client: ModelClient, transcript: list[dict[str, Any]], pages: list[dict[str, Any]],
                   slide_analysis: list[dict[str, Any]], model: str) -> dict[str, Any]:
     prompt = f"""你是技术事实编辑。把视频转写和 PPT 建成证据台账，供后续作者使用。
 
@@ -510,7 +656,7 @@ PPT：
                        reasoning="high", schema=EVIDENCE_SCHEMA)
 
 
-def make_outline(client: OpenRouter, evidence: dict[str, Any], transcript: list[dict[str, Any]],
+def make_outline(client: ModelClient, evidence: dict[str, Any], transcript: list[dict[str, Any]],
                  pages: list[dict[str, Any]], slide_analysis: list[dict[str, Any]], model: str,
                  max_sections: int) -> dict[str, Any]:
     prompt = f"""你是资深技术主编。为一篇图文技术博客规划 6-{max_sections} 个核心章节。
@@ -542,7 +688,7 @@ PPT 页：1-{len(pages)}
     return outline
 
 
-def write_section(client: OpenRouter, section: dict[str, Any], outline: dict[str, Any],
+def write_section(client: ModelClient, section: dict[str, Any], outline: dict[str, Any],
                   evidence: dict[str, Any], transcript: list[dict[str, Any]],
                   pages: list[dict[str, Any]], slide_analysis: list[dict[str, Any]], model: str) -> str:
     facts = [fact for fact in evidence["facts"] if fact["id"] in set(section["key_fact_ids"])]
@@ -576,7 +722,7 @@ def write_section(client: OpenRouter, section: dict[str, Any], outline: dict[str
                        max_tokens=10000, reasoning="high", temperature=0.2)
 
 
-def global_edit(client: OpenRouter, draft: str, outline: dict[str, Any], evidence: dict[str, Any],
+def global_edit(client: ModelClient, draft: str, outline: dict[str, Any], evidence: dict[str, Any],
                 model: str, stage: str = "global-edit", issues: list[dict[str, Any]] | None = None) -> str:
     issue_text = "" if not issues else "\n必须定点修复的审稿问题：\n" + json.dumps(issues, ensure_ascii=False)
     prompt = f"""你是技术出版物总编。把分节草稿编辑成一篇可以直接发布的中文 Markdown 长文。
@@ -605,7 +751,7 @@ def global_edit(client: OpenRouter, draft: str, outline: dict[str, Any], evidenc
                        max_tokens=30000, reasoning="high", temperature=0.15)
 
 
-def review_article(client: OpenRouter, article: str, outline: dict[str, Any], evidence: dict[str, Any],
+def review_article(client: ModelClient, article: str, outline: dict[str, Any], evidence: dict[str, Any],
                    model: str) -> dict[str, Any]:
     prompt = f"""你是独立技术审稿人。逐项检查文章，但只输出严格 JSON。
 
@@ -682,7 +828,7 @@ def package_markdown_assets(article: str, source_root: Path, final_dir: Path) ->
     return copied
 
 
-def translate_markdown(client: OpenRouter, article: str, model: str, *,
+def translate_markdown(client: ModelClient, article: str, model: str, *,
                        stage: str = "translate-english", issues: list[str] | None = None) -> str:
     repair = ""
     if issues:
@@ -778,6 +924,10 @@ def main() -> int:
     parser.add_argument("slides", type=Path, help="对应的 PPTX/PPTM/PDF 幻灯片")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("tech_blog_output"))
     parser.add_argument("--transcript-json", type=Path, help="复用现有带时间戳转写 JSON")
+    parser.add_argument("--provider", choices=["openrouter", "codex"], default="openrouter",
+                        help="模型后端：OpenRouter API，或已登录的 Codex CLI")
+    parser.add_argument("--codex-model",
+                        help="Codex 后端模型；省略时使用 Codex CLI 当前配置的默认模型")
     parser.add_argument("--style-profile", type=Path,
                         default=Path("references/mengyuan_async_llm/STYLE_PROFILE.md"))
     parser.add_argument("--reference-html", type=Path,
@@ -803,9 +953,12 @@ def main() -> int:
         parser.error("幻灯片必须是 PDF、PPTX、PPSX、POTX、PPTM、PPSM 或 POTM")
     if not 6 <= args.max_sections <= 9:
         parser.error("--max-sections 必须在 6 到 9 之间")
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        parser.error("请设置环境变量 OPENROUTER_API_KEY；脚本不会保存明文密钥")
+    api_key = None
+    if args.provider == "openrouter":
+        load_dotenv(Path(__file__).resolve().parent / ".env")
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            parser.error("请设置 OPENROUTER_API_KEY 环境变量，或写入项目根目录 .env；脚本不会保存或输出明文密钥")
     if args.style_profile.is_file():
         STYLE_PROFILE = args.style_profile.read_text(encoding="utf-8")
 
@@ -815,13 +968,18 @@ def main() -> int:
     manifest = {
         "schema_version": SCHEMA_VERSION, "pipeline_version": PIPELINE_VERSION,
         "media": file_fingerprint(args.media), "slides": file_fingerprint(args.slides),
+        "provider": args.provider,
         "models": {"analyst": args.analyst_model, "writer": args.writer_model,
                    "critic": args.critic_model, "translation": args.translation_model,
-                   "stt": args.stt_model},
+                   "stt": args.stt_model, "codex": args.codex_model or "configured-default"},
         "reference": str(args.reference_html.resolve()) if args.reference_html.exists() else None,
     }
     atomic_json(root / "run.json", manifest)
-    client = OpenRouter(api_key, root / "cache")
+    client: ModelClient
+    if args.provider == "openrouter":
+        client = OpenRouter(str(api_key), root / "cache")
+    else:
+        client = CodexClient(root / "cache", Path(__file__).resolve().parent, args.codex_model)
 
     log("[1/7] 提取并渲染 PPT")
     prepared_slides, slide_texts = prepare_slides(args.slides, root)
@@ -832,6 +990,10 @@ def main() -> int:
         log(f"[2/7] 复用现有转写：{transcript_path}")
         transcript = load_transcript(transcript_path)
     else:
+        if args.provider == "codex":
+            raise RuntimeError(
+                "Codex 后端需要现成转录；请用 --transcript-json 指定 *_chapters_transcript.json"
+            )
         log("[2/7] 没有发现现成转写，开始带重叠并行转写")
         transcript = client.transcribe(args.media, model=args.stt_model, workers=args.workers,
                                        chunk_seconds=180, overlap_seconds=15)
@@ -899,6 +1061,7 @@ def main() -> int:
         "media": str(args.media.resolve()), "slides": str(args.slides.resolve()),
         "transcript": str(transcript_path.resolve()) if transcript_path else "generated",
         "reference_style_only": str(args.reference_html.resolve()) if args.reference_html.exists() else None,
+        "provider": args.provider,
         "models": manifest["models"],
     })
     docx_path = root / "final" / "blog.docx"

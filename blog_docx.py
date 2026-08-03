@@ -160,8 +160,37 @@ INLINE_PATTERN = re.compile(
 )
 
 
+def latex_to_plain(value: str) -> str:
+    """Convert the small LaTeX subset emitted by the writing pipeline to readable text."""
+    value = value.strip()
+    for opening, closing in ((r"\[", r"\]"), ("$$", "$$"), (r"\(", r"\)")):
+        if value.startswith(opening) and value.endswith(closing):
+            value = value[len(opening):-len(closing)].strip()
+    value = re.sub(r"\\(?:text|operatorname)\{([^{}]*)\}", r"\1", value)
+    value = value.replace(r"\_", "_")
+    value = re.sub(r"_\{([^{}]*)\}", r"_\1", value)
+    value = re.sub(r"\^\{([^{}]*)\}", r"^\1", value)
+    fraction = re.compile(r"\\frac\{([^{}]*)\}\{([^{}]*)\}")
+    while fraction.search(value):
+        value = fraction.sub(lambda match: f"({match.group(1)}) / ({match.group(2)})", value)
+    value = value.replace("{,}", ",")
+    value = value.replace(r"\times", " × ").replace(r"\cdot", " · ")
+    value = value.replace(r"\approx", "≈").replace(r"\le", "≤").replace(r"\ge", "≥")
+    value = value.replace(r"\;", " ").replace(r"\,", " ").replace(r"\ ", " ")
+    value = value.replace(r"\left", "").replace(r"\right", "")
+    value = value.replace("{", "").replace("}", "")
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def inline_math_to_plain(value: str) -> str:
+    value = re.sub(r"\\\((.+?)\\\)", lambda match: latex_to_plain(match.group(1)), value)
+    return re.sub(r"(?<!\\)\$([^$\n]+)\$", lambda match: latex_to_plain(match.group(1)), value)
+
+
 def add_inline(paragraph, text: str, *, default_size: float | None = None,
                default_color: str | None = None) -> None:
+    text = inline_math_to_plain(text)
+
     def apply_default(run, *, bold: bool | None = None, italic: bool | None = None) -> None:
         if default_size is not None or default_color is not None:
             set_run_font(run, size=default_size, color=default_color, bold=bold, italic=italic)
@@ -400,6 +429,20 @@ def _configure_styles(document: Document) -> tuple[int, int]:
     lead.paragraph_format.space_after = Pt(12)
     lead.paragraph_format.line_spacing = 1.3
 
+    if "Formula" not in styles:
+        formula = styles.add_style("Formula", WD_STYLE_TYPE.PARAGRAPH)
+    else:
+        formula = styles["Formula"]
+    formula.font.name = "Calibri"
+    formula.font.size = Pt(10.5)
+    formula.font.bold = True
+    formula.font.color.rgb = _hex(INK_BLUE)
+    formula._element.rPr.rFonts.set(qn("w:eastAsia"), "Microsoft YaHei")
+    formula.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    formula.paragraph_format.space_before = Pt(5)
+    formula.paragraph_format.space_after = Pt(10)
+    formula.paragraph_format.keep_together = True
+
     return _make_numbering(document, "bullet"), _make_numbering(document, "decimal")
 
 
@@ -551,11 +594,27 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
 
     index = 0
     body_paragraph_count = 0
+    previous_list_kind: str | None = None
     while index < len(lines):
         raw = lines[index]
         stripped = raw.strip()
         if not stripped or stripped == "---":
             index += 1
+            continue
+        if stripped in {r"\[", "$$"}:
+            closing = r"\]" if stripped == r"\[" else "$$"
+            formula_lines: list[str] = []
+            index += 1
+            while index < len(lines) and lines[index].strip() != closing:
+                formula_lines.append(lines[index].strip())
+                index += 1
+            if index < len(lines):
+                index += 1
+            paragraph = document.add_paragraph(style="Formula")
+            _paragraph_shading(paragraph, LIGHT_FILL)
+            _paragraph_border(paragraph, side="bottom", color=BORDER, size=6, space=4)
+            add_inline(paragraph, latex_to_plain(" ".join(formula_lines)))
+            previous_list_kind = None
             continue
         image_match = re.fullmatch(r"!\[([^\]]*)\]\(([^)]+)\)", stripped)
         if image_match:
@@ -568,10 +627,12 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
                 add_inline(warning, f"[图片缺失：{image_match.group(2)}]", default_size=9,
                            default_color="9B1C1C")
             index += 1
+            previous_list_kind = None
             continue
         if stripped.startswith("|"):
             rows, index = _parse_table(lines, index)
             _add_table(document, rows)
+            previous_list_kind = None
             continue
         heading = re.match(r"^(#{2,4})\s+(.+)$", stripped)
         if heading:
@@ -579,6 +640,7 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
             paragraph = document.add_paragraph(style=f"Heading {level}")
             add_inline(paragraph, heading.group(2))
             index += 1
+            previous_list_kind = None
             continue
         if stripped.startswith(">"):
             paragraph = document.add_paragraph()
@@ -591,27 +653,34 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
             _paragraph_shading(paragraph, LIGHT_FILL)
             add_inline(paragraph, stripped.lstrip("> "), default_size=11.5, default_color=INK_BLUE)
             index += 1
+            previous_list_kind = None
             continue
         bullet = re.match(r"^[-+*]\s+(.+)$", stripped)
         number = re.match(r"^\d+[.)]\s+(.+)$", stripped)
         if bullet or number:
+            list_kind = "bullet" if bullet else "number"
+            if number and previous_list_kind != "number":
+                decimal_num = _make_numbering(document, "decimal")
             paragraph = document.add_paragraph()
             paragraph.paragraph_format.space_after = Pt(4)
             paragraph.paragraph_format.line_spacing = 1.208
             _apply_numbering(paragraph, bullet_num if bullet else decimal_num)
             add_inline(paragraph, (bullet or number).group(1))
             index += 1
+            previous_list_kind = list_kind
             continue
-        if stripped.startswith("*图注") or stripped.startswith("*图："):
+        if re.match(r"^\*图(?:\s*\d+)?[：:].+\*$", stripped):
             paragraph = document.add_paragraph(style="Caption")
-            add_inline(paragraph, stripped)
+            add_inline(paragraph, stripped.strip("*"))
             index += 1
+            previous_list_kind = None
             continue
 
         paragraph = document.add_paragraph(style="Lead" if body_paragraph_count == 0 else "Normal")
         add_inline(paragraph, stripped)
         body_paragraph_count += 1
         index += 1
+        previous_list_kind = None
 
     properties = document.core_properties
     properties.title = title

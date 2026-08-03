@@ -12,7 +12,7 @@ Work from the repository root containing `tech_blog_pipeline.py`.
 1. Confirm the video or audio file and slide deck exist.
 2. Accept PDF, PPTX, PPSX, POTX, PPTM, PPSM, or POTM slides. Let the pipeline render PowerPoint inputs automatically.
 3. Look for a matching `*_chapters_transcript.json` and reuse it with `--transcript-json` to avoid duplicate transcription.
-4. Read the API key only from `OPENROUTER_API_KEY`. Never print, save, or commit it.
+4. Choose `--provider openrouter` for the OpenRouter API or `--provider codex` for an authenticated Codex CLI. For OpenRouter, use `OPENROUTER_API_KEY` from the process environment or repository-root `.env`. For Codex, require an existing transcript JSON and never send the audio file to the model backend.
 5. Choose a unique, descriptive output folder under `tech_blog_output/`.
 
 ## Run the quality workflow
@@ -35,9 +35,26 @@ python tech_blog_pipeline.py `
   --max-sections 8
 ```
 
-Omit `--transcript-json` when no reusable transcript exists. Use `--no-english` only when the user requests Chinese-only output. Keep `--max-sections` between 6 and 9.
+The default is `--provider openrouter`. To use Codex instead, authenticate the CLI with `codex login`, reuse a transcript, and run:
+
+```powershell
+python tech_blog_pipeline.py `
+  "D:\path\video.mp4" `
+  "C:\path\slides.pptx" `
+  --transcript-json "D:\path\video_chapters_transcript.json" `
+  --provider codex `
+  -o "tech_blog_output\topic_slug" `
+  --workers 3 `
+  --max-sections 8
+```
+
+Use `--codex-model <model>` only when the user requests a specific Codex model; otherwise retain the authenticated CLI's configured default. Codex mode may send transcript text and rendered slide images to OpenAI, but not the source audio. OpenRouter mode may send audio when no reusable transcript exists.
+
+Omit `--transcript-json` only with the OpenRouter backend. Use `--no-english` only when the user requests Chinese-only output. Keep `--max-sections` between 6 and 9.
 
 Allow the pipeline to execute slide analysis, evidence extraction, causal outlining, parallel drafting, global editing, independent review, repair, translation, asset packaging, and deterministic QA. Resume the same command after interruption so cache keys remain useful.
+
+When a central tensor formula, attention path, sharding layout, or collective operation remains unclear in the source slides, use `$tensor-formula-viz` to create one supplementary shape-aware figure. Add it only when it improves the explanation, store its publishable files under `final/assets/diagrams/`, and reference the PNG or SVG with a relative Markdown path. Keep the editable/vector source beside it and do not invent shapes that are not supported by the evidence ledger.
 
 ## Verify the deliverables
 

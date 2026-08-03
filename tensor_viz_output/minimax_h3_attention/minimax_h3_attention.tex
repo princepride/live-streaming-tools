@@ -1,0 +1,201 @@
+\documentclass[tikz,border=9pt]{standalone}
+\usepackage[UTF8,fontset=fandol]{ctex}
+\usepackage{amsmath,amssymb}
+\usetikzlibrary{arrows.meta,backgrounds,calc,fit,positioning}
+
+\definecolor{ink}{HTML}{263746}
+\definecolor{muted}{HTML}{697985}
+\definecolor{line}{HTML}{B8C2C9}
+\definecolor{paper}{HTML}{F7F9FA}
+\definecolor{teal}{HTML}{4F8FA5}
+\definecolor{teallight}{HTML}{D9E9EE}
+\definecolor{orange}{HTML}{EE995B}
+\definecolor{orangelight}{HTML}{FBE3D2}
+\definecolor{coral}{HTML}{C95B5B}
+\definecolor{corallight}{HTML}{F2D7D7}
+\definecolor{violet}{HTML}{8A74B5}
+\definecolor{violetlight}{HTML}{E6E0F0}
+
+\tikzset{
+  >=Latex,
+  every node/.style={font=\small,text=ink},
+  flow/.style={->,draw=muted,line width=.8pt},
+  op/.style={draw=line,fill=white,rounded corners=2pt,minimum width=1.45cm,
+             minimum height=.72cm,align=center,font=\small\bfseries},
+  tensor/.style={draw=black!60,rounded corners=1.2pt,minimum width=2.15cm,
+                 minimum height=1.18cm,align=center,line width=.65pt},
+  tinyshape/.style={font=\scriptsize,text=muted,align=center},
+  stage/.style={font=\small\bfseries,text=muted,anchor=west},
+  note/.style={font=\scriptsize,text=muted,align=center},
+  meaning/.style={draw=line,fill=paper,rounded corners=3pt,inner sep=8pt,
+                  text width=25.8cm,align=left,font=\small},
+}
+
+\begin{document}
+\begin{tikzpicture}
+
+% Formula lane
+\node[align=center,font=\large] (formula) at (0,0) {
+  $[Q\mid K\mid V]=XW_{QKV},\quad
+   \widehat Q=\operatorname{RoPE}(\operatorname{RMSNorm}(Q)),\quad
+   \widehat K=\operatorname{RoPE}(\operatorname{RMSNorm}(K))$\\[4pt]
+  $A_d=\operatorname{softmax}\!\left(\widehat Q_d\widehat K_d^{\mathsf T}/\sqrt{128}\right),\quad
+   O_d=A_dV_d,\quad
+   Y=\operatorname{TPReduce}(\operatorname{Concat}_{h}(O)W_O)$
+};
+
+% Stage 1: local TP projection and RoPE
+\node[stage] at (-13.0,-1.02) {1. 本地投影与位置编码（每个 TP/SP Rank）};
+
+\node[tensor,fill=teallight,minimum width=2.5cm,minimum height=1.45cm] (x) at (-11.2,-3.15) {$X_r$};
+\node[tinyshape,below=2pt of x] {$[S_r,\,5376]$};
+
+\node[op] (qkvop) at (-8.25,-3.15) {QKVParallel\\Linear};
+\draw[flow] (x) -- (qkvop);
+
+% Fused output, then three disjoint branches.
+\node[draw=black!60,fill=white,rounded corners=1.2pt,minimum width=2.65cm,
+      minimum height=2.18cm] (qkv) at (-5.15,-3.15) {};
+\fill[teal!55,rounded corners=.6pt] (-6.35,-2.35) rectangle (-3.95,-2.85);
+\fill[coral!55,rounded corners=.6pt] (-6.35,-2.90) rectangle (-3.95,-3.40);
+\fill[orange!55,rounded corners=.6pt] (-6.35,-3.45) rectangle (-3.95,-3.95);
+\node at (-5.15,-2.60) {$Q_r$};
+\node at (-5.15,-3.15) {$K_r$};
+\node at (-5.15,-3.70) {$V_r$};
+\node[tinyshape,below=2pt of qkv] {各自 $[S_r,\,h_{tp},\,128]$};
+\draw[flow] (qkvop) -- node[above,note] {split} (qkv);
+
+\node[op,minimum width=2.0cm,minimum height=.62cm] (qnorm) at (-1.85,-2.45) {RMSNorm + RoPE};
+\node[op,minimum width=2.0cm,minimum height=.62cm] (knorm) at (-1.85,-3.15) {RMSNorm + RoPE};
+\node[op,minimum width=2.0cm,minimum height=.62cm] (vpass) at (-1.85,-3.85) {identity};
+\draw[flow] ($(qkv.east)+(0,.55)$) -- (qnorm.west);
+\draw[flow] (qkv.east) -- (knorm.west);
+\draw[flow] ($(qkv.east)+(0,-.55)$) -- (vpass.west);
+
+\node[tensor,fill=teallight,minimum width=2.15cm,minimum height=.62cm] (qh) at (1.25,-2.45) {$\widehat Q_r\ [S_r,h_{tp},128]$};
+\node[tensor,fill=corallight,minimum width=2.15cm,minimum height=.62cm] (kh) at (1.25,-3.15) {$\widehat K_r\ [S_r,h_{tp},128]$};
+\node[tensor,fill=orangelight,minimum width=2.15cm,minimum height=.62cm] (vo) at (1.25,-3.85) {$V_r\ [S_r,h_{tp},128]$};
+\draw[flow] (qnorm) -- (qh);
+\draw[flow] (knorm) -- (kh);
+\draw[flow] (vpass) -- (vo);
+
+\node[draw=line,fill=paper,rounded corners=2pt,text width=4.5cm,align=left,
+      font=\scriptsize] (rope) at (5.45,-3.15) {
+  \textbf{3D RoPE}\quad $t,h,w$ 各 16 个频率\\
+  前 $96=2\times3\times16$ 维旋转；后 32 维直通
+};
+\draw[dashed,draw=muted,line width=.55pt] (qh.east) -- (rope.west);
+\draw[dashed,draw=muted,line width=.55pt] (kh.east) -- (rope.west);
+
+\begin{scope}[on background layer]
+  \node[draw=line,fill=paper,rounded corners=4pt,fit=(x)(qkvop)(qkv)(qnorm)(knorm)(vpass)(qh)(kh)(vo)(rope),
+        inner xsep=12pt,inner ysep=20pt] {};
+\end{scope}
+
+% Stage 2: Ulysses and packed attention
+\node[stage] at (-13.0,-4.92) {2. 序列换头分片 + Packed 非因果 Attention};
+
+\node[tensor,fill=teallight,minimum width=2.55cm] (localq) at (-11.25,-7.05) {$\widehat Q_r$};
+\node[tinyshape,below=2pt of localq] {$[1,\,S_r,\,h_{tp},\,128]$};
+\node[op,minimum width=2.05cm] (a2a) at (-8.15,-7.05) {Ulysses\\All-to-All};
+\draw[flow] (localq) -- node[above,note] {$S\rightarrow h$} (a2a);
+
+\node[tensor,fill=teallight,minimum width=2.65cm] (globalq) at (-5.05,-7.05) {$\widehat Q^{(u)}$};
+\node[tinyshape,below=2pt of globalq] {$[1,\,S,\,h_{tp}/u,\,128]$};
+\draw[flow] (a2a) -- (globalq);
+
+\node[op] (qkt) at (-2.25,-7.05) {$QK^{\mathsf T}$\\$/\sqrt{128}$};
+\draw[flow] (globalq) -- (qkt);
+\node[note,above=4pt of qkt] {$\widehat K^{(u)}$ 同形输入};
+
+% Block diagonal packed attention matrix
+\node[draw=black!60,minimum width=2.10cm,minimum height=2.10cm,fill=white] (scores) at (.70,-7.05) {};
+\foreach \i in {0,...,5}{
+  \foreach \j in {0,...,5}{
+    % TikZ y grows upward while matrix rows are read top-down: fill the
+    % visual top-left and bottom-right blocks, leaving cross-document blocks white.
+    \pgfmathtruncatemacro{\sameblock}{((\i<3)&&(\j>=3))||((\i>=3)&&(\j<3))}
+    \ifnum\sameblock=1
+      \fill[violet!45,draw=white,line width=.35pt]
+        ($(scores.south west)+(0.05+0.333*\j,0.05+0.333*\i)$)
+        rectangle ++(.31,.31);
+    \else
+      \fill[white,draw=line!55,line width=.25pt]
+        ($(scores.south west)+(0.05+0.333*\j,0.05+0.333*\i)$)
+        rectangle ++(.31,.31);
+    \fi
+  }
+}
+\node at (scores) {$A$};
+\node[tinyshape,below=2pt of scores] {每个文档 $[S_d,S_d]$；跨文档为空};
+\draw[flow] (qkt) -- node[above,note] {softmax} (scores);
+
+\node[op] (av) at (3.65,-7.05) {$A V$};
+\node[note,above=4pt of av] {$V^{(u)}:[1,S,h_{tp}/u,128]$};
+\draw[flow] (scores) -- (av);
+
+\node[tensor,fill=violetlight,minimum width=2.65cm] (ou) at (6.55,-7.05) {$O^{(u)}$};
+\node[tinyshape,below=2pt of ou] {$[1,\,S,\,h_{tp}/u,\,128]$};
+\draw[flow] (av) -- (ou);
+
+\node[draw=line,fill=paper,rounded corners=2pt,text width=3.5cm,align=left,font=\scriptsize]
+      (meta) at (10.35,-7.05) {
+  `cu\_seqlens` 切分 packed 文档；\\
+  $causal=False$，但禁止跨文档注意力；\\
+  对齐 padding 由 mask 排除
+};
+\draw[flow] (ou) -- (meta);
+
+\begin{scope}[on background layer]
+  \node[draw=line,fill=paper,rounded corners=4pt,fit=(localq)(a2a)(globalq)(qkt)(scores)(av)(ou)(meta),
+        inner xsep=12pt,inner ysep=22pt] {};
+\end{scope}
+
+% Stage 3: reverse communication and output projection
+\node[stage] at (-13.0,-9.35) {3. 恢复序列分片并执行 TP 输出投影};
+
+\node[tensor,fill=violetlight,minimum width=2.65cm] (oin) at (-10.85,-11.20) {$O^{(u)}$};
+\node[tinyshape,below=2pt of oin] {$[1,\,S,\,h_{tp}/u,\,128]$};
+\node[op,minimum width=2.2cm] (ra2a) at (-7.55,-11.20) {逆 Ulysses\\All-to-All};
+\draw[flow] (oin) -- node[above,note] {$h\rightarrow S$} (ra2a);
+
+\node[tensor,fill=violetlight,minimum width=2.55cm] (or) at (-4.25,-11.20) {$O_r$};
+\node[tinyshape,below=2pt of or] {$[S_r,\,h_{tp},\,128]$};
+\draw[flow] (ra2a) -- (or);
+
+\node[op] (reshape) at (-1.35,-11.20) {reshape};
+\draw[flow] (or) -- (reshape);
+\node[tensor,fill=violetlight,minimum width=2.65cm] (flat) at (1.55,-11.20) {$\overline O_r$};
+\node[tinyshape,below=2pt of flat] {$[S_r,\,h_{tp}\!\cdot\!128]$};
+\draw[flow] (reshape) -- (flat);
+
+\node[op,minimum width=2.25cm] (wo) at (4.75,-11.20) {RowParallel\\$W_O$};
+\draw[flow] (flat) -- (wo);
+\node[op,minimum width=1.75cm] (tpr) at (7.65,-11.20) {TP\\All-Reduce};
+\draw[flow] (wo) -- (tpr);
+\node[tensor,fill=teallight,minimum width=2.55cm] (y) at (10.65,-11.20) {$Y_r$};
+\node[tinyshape,below=2pt of y] {$[S_r,\,5376]$};
+\draw[flow] (tpr) -- (y);
+
+\begin{scope}[on background layer]
+  \node[draw=line,fill=paper,rounded corners=4pt,fit=(oin)(ra2a)(or)(reshape)(flat)(wo)(tpr)(y),
+        inner xsep=12pt,inner ysep=20pt] {};
+\end{scope}
+
+% Meaning box
+\node[meaning,anchor=north] (meaning) at (0,-13.10) {
+  \begin{tabular}{@{}p{2.0cm}p{23.1cm}@{}}
+  \textbf{轴} & $S$：全局 packed token 数；$S_r$：当前 Ulysses Rank 的序列行数；
+  $h=56$，$h_{tp}=56/p_{tp}$；$u$：Ulysses degree；$d_h=128$；隐藏维 $d=5376$。\\[5pt]
+  \textbf{对象} & $Q,K,V,O,Y$ 为 bf16 值张量；$A$ 为每头、每文档内部的注意力概率；
+  `cu\_seqlens` 为 packed 文档边界索引。MiniMax H3 此处是 MHA，因此 Q/K/V 头数相同。\\[5pt]
+  \textbf{机制} & TP 在头/投影维切分 QKV，RowParallel $W_O$ 后做 TP 归约；Ulysses 通过两次 All-to-All
+  在序列分片与头分片之间互换，使每个 Rank 用较少的头看到完整序列。图中单元格仅表达结构，不代表真实维数。\\
+  \end{tabular}
+};
+
+\node[font=\scriptsize,text=muted,anchor=north] at ($(meaning.south)+(0,-.20)$)
+  {MiniMax H3 Packed MHA（TP + Ulysses）@五道口纳什};
+
+\end{tikzpicture}
+\end{document}

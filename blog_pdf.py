@@ -32,7 +32,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from blog_docx import INLINE_PATTERN, _extract_title, _parse_table
+from blog_docx import INLINE_PATTERN, _extract_title, _parse_table, inline_math_to_plain, latex_to_plain
 
 
 INK = colors.HexColor("#203748")
@@ -74,6 +74,7 @@ def register_fonts(language: str = "zh") -> tuple[str, str]:
 
 
 def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
+    text = inline_math_to_plain(text)
     text = text.translate(str.maketrans({
         "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3", "₄": "_4",
         "①": "1)", "②": "2)", "③": "3)", "④": "4)",
@@ -262,11 +263,39 @@ def _collect_list(lines: list[str], start: int, ordered: bool,
         match = pattern.match(lines[index].strip())
         if not match:
             break
-        paragraph = Paragraph(_inline_markup(match.group(1), regular_font=regular, bold_font=bold), style)
-        items.append(ListItem(paragraph, leftIndent=13, value=None))
+        item_lines = [match.group(1).rstrip()]
         index += 1
+
+        # Markdown commonly separates list items with a blank line and uses an
+        # indented or plain continuation paragraph after the marker. Keep those
+        # lines inside the current ListItem so a 1./2./3. list is not split into
+        # three independent one-item lists (which would render as 1./1./1.).
+        while index < len(lines):
+            stripped = lines[index].strip()
+            if pattern.match(stripped):
+                break
+            if not stripped:
+                lookahead = index + 1
+                while lookahead < len(lines) and not lines[lookahead].strip():
+                    lookahead += 1
+                if lookahead < len(lines) and pattern.match(lines[lookahead].strip()):
+                    index = lookahead
+                    break
+                index = lookahead
+                break
+            if re.match(r"^(?:#{1,6}\s+|[-+*]\s+|\d+[.)]\s+|>|```|---+$)", stripped):
+                break
+            item_lines.append(stripped)
+            index += 1
+
+        paragraph = Paragraph(
+            _inline_markup(" ".join(item_lines), regular_font=regular, bold_font=bold),
+            style,
+        )
+        item_value = len(items) + 1 if ordered else None
+        items.append(ListItem(paragraph, leftIndent=13, value=item_value))
     flow = ListFlowable(
-        items, bulletType="1" if ordered else "bullet", start="1" if ordered else None,
+        items, bulletType="1" if ordered else "bullet", start=1 if ordered else None,
         leftIndent=25,
         bulletFontName=regular, bulletFontSize=9, bulletColor=INK, bulletOffsetY=1,
         spaceBefore=1, spaceAfter=6,
@@ -291,16 +320,6 @@ def _first_page(canvas, document) -> None:
     canvas.setAuthor("Technical Blog Pipeline")
     canvas.setSubject("Technical video and slide synthesis")
     canvas.restoreState()
-
-
-def _latex_to_plain(value: str) -> str:
-    value = value.strip().removeprefix("$$").removesuffix("$$").strip()
-    value = re.sub(r"\\(?:text|operatorname)\{([^{}]*)\}", r"\1", value)
-    value = value.replace(r"\;", " ").replace(r"\,", " ")
-    value = value.replace(r"\times", "×").replace(r"\cdot", "·")
-    value = value.replace(r"\approx", "≈").replace(r"\le", "≤").replace(r"\ge", "≥")
-    value = re.sub(r"\s+", " ", value)
-    return value
 
 
 def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str | None = None,
@@ -366,8 +385,21 @@ def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str
             code_text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1", "\n".join(code_lines))
             story.append(Preformatted(code_text, styles["code_block"], maxLineLength=88))
             continue
-        if stripped.startswith("$$") and stripped.endswith("$$"):
-            story.append(Paragraph(html.escape(_latex_to_plain(stripped)), styles["formula"]))
+        if stripped in {r"\[", "$$"}:
+            closing = r"\]" if stripped == r"\[" else "$$"
+            formula_lines: list[str] = []
+            index += 1
+            while index < len(lines) and lines[index].strip() != closing:
+                formula_lines.append(lines[index].strip())
+                index += 1
+            if index < len(lines):
+                index += 1
+            story.append(Paragraph(html.escape(latex_to_plain(" ".join(formula_lines))),
+                                   styles["formula"]))
+            continue
+        if ((stripped.startswith("$$") and stripped.endswith("$$")) or
+                (stripped.startswith(r"\[") and stripped.endswith(r"\]"))):
+            story.append(Paragraph(html.escape(latex_to_plain(stripped)), styles["formula"]))
             index += 1
             continue
         image_match = re.fullmatch(r"!\[([^\]]*)\]\(([^)]+)\)", stripped)
