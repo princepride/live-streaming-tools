@@ -1,9 +1,6 @@
 site_name: vLLM 小课堂技术博客
 site_description: 从技术视频与课件整理而来的中英文深度技术文章
 site_url: https://princepride.github.io/live-streaming-tools/
-repo_url: https://github.com/princepride/live-streaming-tools
-repo_name: princepride/live-streaming-tools
-
 docs_dir: tech_blog_output
 site_dir: site
 
