@@ -6,11 +6,12 @@
   --vllm-muted: #64748b;
   --vllm-line: #e2e8f0;
   --vllm-paper: #f8fafc;
-  --vllm-accent: #f59e0b;
+  --vllm-accent: #3b82f6;
   --md-primary-fg-color: #111827;
   --md-primary-fg-color--light: #334155;
   --md-primary-fg-color--dark: #0f172a;
-  --md-accent-fg-color: #d97706;
+  --md-accent-fg-color: #2563eb;
+  --md-typeset-a-color: #2563eb;
 }
 
 [data-md-color-scheme="slate"] {
@@ -22,7 +23,8 @@
   --md-primary-fg-color: #0f172a;
   --md-primary-fg-color--light: #1e293b;
   --md-primary-fg-color--dark: #090f1a;
-  --md-accent-fg-color: #f59e0b;
+  --md-accent-fg-color: #60a5fa;
+  --md-typeset-a-color: #60a5fa;
 }
 
 .md-header {
@@ -114,7 +116,7 @@
 
 .vllm-eyebrow {
   margin: 0 0 1rem !important;
-  color: #b45309;
+  color: #2563eb;
   font-family: var(--md-code-font);
   font-size: 0.62rem;
   font-weight: 800;
@@ -166,7 +168,7 @@
 
 .vllm-actions .md-button:hover {
   border-color: var(--vllm-accent);
-  background: rgba(245, 158, 11, 0.07);
+  background: rgba(59, 130, 246, 0.07);
   color: var(--vllm-ink);
 }
 
@@ -228,9 +230,9 @@
   display: inline-block;
   margin-bottom: 0.45rem;
   padding: 0.2rem 0.45rem;
-  border-color: rgba(245, 158, 11, 0.38);
-  background: rgba(245, 158, 11, 0.07);
-  color: #b45309;
+  border-color: rgba(59, 130, 246, 0.38);
+  background: rgba(59, 130, 246, 0.07);
+  color: #2563eb;
 }
 
 .md-typeset .grid.cards > ul > li {
@@ -243,7 +245,7 @@
 
 .md-typeset .grid.cards > ul > li:hover {
   transform: translateY(-2px);
-  border-color: rgba(245, 158, 11, 0.58);
+  border-color: rgba(59, 130, 246, 0.58);
   box-shadow: 0 0.6rem 1.5rem rgba(15, 23, 42, 0.08);
 }
 
