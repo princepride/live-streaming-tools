@@ -20,182 +20,203 @@
   >=Latex,
   every node/.style={font=\small,text=ink},
   flow/.style={->,draw=muted,line width=.8pt},
-  op/.style={draw=line,fill=white,rounded corners=2pt,minimum width=1.45cm,
-             minimum height=.72cm,align=center,font=\small\bfseries},
+  op/.style={draw=line,fill=white,rounded corners=2pt,minimum width=1.55cm,
+             minimum height=.70cm,align=center,font=\small\bfseries},
   tensor/.style={draw=black!60,rounded corners=1.2pt,minimum width=2.15cm,
-                 minimum height=1.18cm,align=center,line width=.65pt},
+                 minimum height=1.12cm,align=center,line width=.65pt},
   tinyshape/.style={font=\scriptsize,text=muted,align=center},
   stage/.style={font=\small\bfseries,text=muted,anchor=west},
   note/.style={font=\scriptsize,text=muted,align=center},
   meaning/.style={draw=line,fill=paper,rounded corners=3pt,inner sep=8pt,
-                  text width=25.8cm,align=left,font=\small},
+                  text width=25.9cm,align=left,font=\small},
 }
 
 \begin{document}
 \begin{tikzpicture}
 
-% Formula lane
+% Formula zone
 \node[align=center,font=\large] (formula) at (0,0) {
   $[Q\mid K\mid V]=XW_{QKV},\quad
    \widehat Q=\operatorname{RoPE}(\operatorname{RMSNorm}(Q)),\quad
    \widehat K=\operatorname{RoPE}(\operatorname{RMSNorm}(K))$\\[4pt]
-  $A_d=\operatorname{softmax}\!\left(\widehat Q_d\widehat K_d^{\mathsf T}/\sqrt{128}\right),\quad
-   O_d=A_dV_d,\quad
-   Y=\operatorname{TPReduce}(\operatorname{Concat}_{h}(O)W_O)$
+  $L_{d,a}=\widehat Q_{d,a}\widehat K_{d,a}^{\mathsf T}/\sqrt{128},\quad
+   A_{d,a}=\operatorname{softmax}(L_{d,a}),\quad
+   O_{d,a}=A_{d,a}V_{d,a},\quad Y=\operatorname{Concat}_{a}(O)W_O$
 };
 
-% Stage 1: local TP projection and RoPE
-\node[stage] at (-13.0,-1.02) {1. 本地投影与位置编码（每个 TP/SP Rank）};
+% Stage 1: global QKV preparation
+\node[stage] at (-13.0,-1.05) {1. QKV 投影、逐头归一化与 3D RoPE};
 
-\node[tensor,fill=teallight,minimum width=2.5cm,minimum height=1.45cm] (x) at (-11.2,-3.15) {$X_r$};
-\node[tinyshape,below=2pt of x] {$[S_r,\,5376]$};
+\node[tensor,fill=teallight,minimum width=2.55cm,minimum height=1.42cm] (x) at (-11.35,-3.15) {$X$};
+\node[tinyshape,below=2pt of x] {$[T,\,5376]$};
+\node[op,minimum width=2.05cm] (linear) at (-8.40,-3.15) {Fused QKV\\Linear};
+\draw[flow] (x) -- (linear);
 
-\node[op] (qkvop) at (-8.25,-3.15) {QKVParallel\\Linear};
-\draw[flow] (x) -- (qkvop);
-
-% Fused output, then three disjoint branches.
 \node[draw=black!60,fill=white,rounded corners=1.2pt,minimum width=2.65cm,
-      minimum height=2.18cm] (qkv) at (-5.15,-3.15) {};
-\fill[teal!55,rounded corners=.6pt] (-6.35,-2.35) rectangle (-3.95,-2.85);
-\fill[coral!55,rounded corners=.6pt] (-6.35,-2.90) rectangle (-3.95,-3.40);
-\fill[orange!55,rounded corners=.6pt] (-6.35,-3.45) rectangle (-3.95,-3.95);
-\node at (-5.15,-2.60) {$Q_r$};
-\node at (-5.15,-3.15) {$K_r$};
-\node at (-5.15,-3.70) {$V_r$};
-\node[tinyshape,below=2pt of qkv] {各自 $[S_r,\,h_{tp},\,128]$};
-\draw[flow] (qkvop) -- node[above,note] {split} (qkv);
+      minimum height=2.18cm] (qkv) at (-5.25,-3.15) {};
+\fill[teal!55,rounded corners=.6pt] (-6.45,-2.35) rectangle (-4.05,-2.85);
+\fill[coral!55,rounded corners=.6pt] (-6.45,-2.90) rectangle (-4.05,-3.40);
+\fill[orange!55,rounded corners=.6pt] (-6.45,-3.45) rectangle (-4.05,-3.95);
+\node at (-5.25,-2.60) {$Q$};
+\node at (-5.25,-3.15) {$K$};
+\node at (-5.25,-3.70) {$V$};
+\node[tinyshape,below=2pt of qkv] {各自 $[T,\,56,\,128]$};
+\draw[flow] (linear) -- node[above,note] {split + view} (qkv);
 
-\node[op,minimum width=2.0cm,minimum height=.62cm] (qnorm) at (-1.85,-2.45) {RMSNorm + RoPE};
-\node[op,minimum width=2.0cm,minimum height=.62cm] (knorm) at (-1.85,-3.15) {RMSNorm + RoPE};
-\node[op,minimum width=2.0cm,minimum height=.62cm] (vpass) at (-1.85,-3.85) {identity};
+\node[op,minimum width=2.0cm,minimum height=.62cm] (qnorm) at (-1.90,-2.45) {RMSNorm + RoPE};
+\node[op,minimum width=2.0cm,minimum height=.62cm] (knorm) at (-1.90,-3.15) {RMSNorm + RoPE};
+\node[op,minimum width=2.0cm,minimum height=.62cm] (vpass) at (-1.90,-3.85) {identity};
 \draw[flow] ($(qkv.east)+(0,.55)$) -- (qnorm.west);
 \draw[flow] (qkv.east) -- (knorm.west);
 \draw[flow] ($(qkv.east)+(0,-.55)$) -- (vpass.west);
 
-\node[tensor,fill=teallight,minimum width=2.15cm,minimum height=.62cm] (qh) at (1.25,-2.45) {$\widehat Q_r\ [S_r,h_{tp},128]$};
-\node[tensor,fill=corallight,minimum width=2.15cm,minimum height=.62cm] (kh) at (1.25,-3.15) {$\widehat K_r\ [S_r,h_{tp},128]$};
-\node[tensor,fill=orangelight,minimum width=2.15cm,minimum height=.62cm] (vo) at (1.25,-3.85) {$V_r\ [S_r,h_{tp},128]$};
+\node[tensor,fill=teallight,minimum width=2.45cm,minimum height=.62cm] (qh) at (1.35,-2.45) {$\widehat Q\ [T,56,128]$};
+\node[tensor,fill=corallight,minimum width=2.45cm,minimum height=.62cm] (kh) at (1.35,-3.15) {$\widehat K\ [T,56,128]$};
+\node[tensor,fill=orangelight,minimum width=2.45cm,minimum height=.62cm] (vo) at (1.35,-3.85) {$V\ [T,56,128]$};
 \draw[flow] (qnorm) -- (qh);
 \draw[flow] (knorm) -- (kh);
 \draw[flow] (vpass) -- (vo);
 
-\node[draw=line,fill=paper,rounded corners=2pt,text width=4.5cm,align=left,
-      font=\scriptsize] (rope) at (5.45,-3.15) {
+\node[draw=line,fill=paper,rounded corners=2pt,text width=4.55cm,align=left,
+      font=\scriptsize] (rope) at (5.75,-3.15) {
   \textbf{3D RoPE}\quad $t,h,w$ 各 16 个频率\\
-  前 $96=2\times3\times16$ 维旋转；后 32 维直通
+  前 $96=2\times3\times16$ 维旋转；后 32 维直通\\
+  仅作用于 $Q,K$，$V$ 不变
 };
 \draw[dashed,draw=muted,line width=.55pt] (qh.east) -- (rope.west);
 \draw[dashed,draw=muted,line width=.55pt] (kh.east) -- (rope.west);
 
+\node[draw=line,fill=paper,rounded corners=2pt,text width=3.3cm,align=left,font=\scriptsize]
+      (bounds) at (10.55,-3.15) {
+  `cu\_seqlens: [D+1]`\\
+  将 $T$ 个 packed token 切为\\
+  $D$ 个文档，长度分别为 $S_d$
+};
+\draw[flow] (rope.east) -- node[above,note] {按文档切分} (bounds.west);
+
 \begin{scope}[on background layer]
-  \node[draw=line,fill=paper,rounded corners=4pt,fit=(x)(qkvop)(qkv)(qnorm)(knorm)(vpass)(qh)(kh)(vo)(rope),
+  \node[draw=line,fill=paper,rounded corners=4pt,fit=(x)(linear)(qkv)(qnorm)(knorm)(vpass)(qh)(kh)(vo)(rope)(bounds),
         inner xsep=12pt,inner ysep=20pt] {};
 \end{scope}
 
-% Stage 2: Ulysses and packed attention
-\node[stage] at (-13.0,-4.92) {2. 序列换头分片 + Packed 非因果 Attention};
+% Stage 2: full per-document, per-head attention
+\node[stage] at (-13.0,-5.30) {2. 每个 packed 文档、每个 Attention Head 的完整计算};
 
-\node[tensor,fill=teallight,minimum width=2.55cm] (localq) at (-11.25,-7.05) {$\widehat Q_r$};
-\node[tinyshape,below=2pt of localq] {$[1,\,S_r,\,h_{tp},\,128]$};
-\node[op,minimum width=2.05cm] (a2a) at (-8.15,-7.05) {Ulysses\\All-to-All};
-\draw[flow] (localq) -- node[above,note] {$S\rightarrow h$} (a2a);
+\node[tensor,fill=teallight,minimum width=2.30cm,minimum height=1.55cm] (qd) at (-11.45,-7.25) {$\widehat Q_{d,a}$};
+\node[tinyshape,below=2pt of qd] {$[S_d,\,128]$};
 
-\node[tensor,fill=teallight,minimum width=2.65cm] (globalq) at (-5.05,-7.05) {$\widehat Q^{(u)}$};
-\node[tinyshape,below=2pt of globalq] {$[1,\,S,\,h_{tp}/u,\,128]$};
-\draw[flow] (a2a) -- (globalq);
+\node[tensor,fill=corallight,minimum width=1.55cm,minimum height=2.30cm] (kdt) at (-8.55,-7.25) {$\widehat K_{d,a}^{\mathsf T}$};
+\node[tinyshape,below=2pt of kdt] {$[128,\,S_d]$};
+\node[font=\Large] at (-10.02,-7.25) {$\times$};
+\node[note] at (-10.02,-6.70) {收缩 $128$};
 
-\node[op] (qkt) at (-2.25,-7.05) {$QK^{\mathsf T}$\\$/\sqrt{128}$};
-\draw[flow] (globalq) -- (qkt);
-\node[note,above=4pt of qkt] {$\widehat K^{(u)}$ 同形输入};
+\node[op,minimum width=1.25cm] (scale) at (-6.15,-7.25) {$\div\sqrt{128}$};
+\draw[flow] (kdt) -- (scale);
 
-% Block diagonal packed attention matrix
-\node[draw=black!60,minimum width=2.10cm,minimum height=2.10cm,fill=white] (scores) at (.70,-7.05) {};
-\foreach \i in {0,...,5}{
-  \foreach \j in {0,...,5}{
-    % TikZ y grows upward while matrix rows are read top-down: fill the
-    % visual top-left and bottom-right blocks, leaving cross-document blocks white.
-    \pgfmathtruncatemacro{\sameblock}{((\i<3)&&(\j>=3))||((\i>=3)&&(\j<3))}
-    \ifnum\sameblock=1
-      \fill[violet!45,draw=white,line width=.35pt]
-        ($(scores.south west)+(0.05+0.333*\j,0.05+0.333*\i)$)
-        rectangle ++(.31,.31);
-    \else
-      \fill[white,draw=line!55,line width=.25pt]
-        ($(scores.south west)+(0.05+0.333*\j,0.05+0.333*\i)$)
-        rectangle ++(.31,.31);
-    \fi
+% Logit matrix: dense non-causal attention within one document.
+\node[draw=black!60,minimum width=1.92cm,minimum height=1.92cm,fill=white] (logits) at (-3.75,-7.25) {};
+\foreach \i in {0,...,4}{
+  \foreach \j in {0,...,4}{
+    \pgfmathtruncatemacro{\shade}{35+10*mod(2*\i+3*\j,3)}
+    \fill[violet!\shade,draw=white,line width=.35pt]
+      ($(logits.south west)+(0.06+0.36*\j,0.06+0.36*\i)$) rectangle ++(.33,.33);
   }
 }
-\node at (scores) {$A$};
-\node[tinyshape,below=2pt of scores] {每个文档 $[S_d,S_d]$；跨文档为空};
-\draw[flow] (qkt) -- node[above,note] {softmax} (scores);
+\node at (logits) {$L_{d,a}$};
+\node[tinyshape,below=2pt of logits] {$[S_d,\,S_d]$ logits};
+\draw[flow] (scale) -- (logits);
 
-\node[op] (av) at (3.65,-7.05) {$A V$};
-\node[note,above=4pt of av] {$V^{(u)}:[1,S,h_{tp}/u,128]$};
-\draw[flow] (scores) -- (av);
+\node[op,minimum width=1.35cm] (softmax) at (-1.25,-7.25) {softmax\\沿 key 轴};
+\draw[flow] (logits) -- (softmax);
 
-\node[tensor,fill=violetlight,minimum width=2.65cm] (ou) at (6.55,-7.05) {$O^{(u)}$};
-\node[tinyshape,below=2pt of ou] {$[1,\,S,\,h_{tp}/u,\,128]$};
-\draw[flow] (av) -- (ou);
+\node[draw=black!60,minimum width=1.92cm,minimum height=1.92cm,fill=white] (attn) at (1.25,-7.25) {};
+\foreach \i in {0,...,4}{
+  \foreach \j in {0,...,4}{
+    \pgfmathtruncatemacro{\shade}{35+10*mod(\i+2*\j,3)}
+    \fill[violet!\shade,draw=white,line width=.35pt]
+      ($(attn.south west)+(0.06+0.36*\j,0.06+0.36*\i)$) rectangle ++(.33,.33);
+  }
+}
+\node at (attn) {$A_{d,a}$};
+\node[tinyshape,below=2pt of attn] {$[S_d,\,S_d]$ probabilities};
+\draw[flow] (softmax) -- (attn);
 
-\node[draw=line,fill=paper,rounded corners=2pt,text width=3.5cm,align=left,font=\scriptsize]
-      (meta) at (10.35,-7.05) {
-  `cu\_seqlens` 切分 packed 文档；\\
-  $causal=False$，但禁止跨文档注意力；\\
-  对齐 padding 由 mask 排除
+\node[tensor,fill=orangelight,minimum width=2.30cm,minimum height=1.55cm] (vd) at (4.15,-7.25) {$V_{d,a}$};
+\node[tinyshape,below=2pt of vd] {$[S_d,\,128]$};
+\node[font=\Large] at (2.70,-7.25) {$\times$};
+\node[note] at (2.70,-6.70) {收缩 $S_d$};
+
+\node[op,minimum width=1.25cm] (av) at (6.65,-7.25) {$A_{d,a}V_{d,a}$};
+\draw[flow] (vd) -- (av);
+
+\node[tensor,fill=violetlight,minimum width=2.30cm,minimum height=1.55cm] (od) at (9.20,-7.25) {$O_{d,a}$};
+\node[tinyshape,below=2pt of od] {$[S_d,\,128]$};
+\draw[flow] (av) -- (od);
+
+\node[draw=line,fill=paper,rounded corners=2pt,text width=2.4cm,align=left,font=\scriptsize]
+      (noncausal) at (12.15,-7.25) {
+  $causal=False$\\
+  文档内全连接；\\
+  文档之间完全隔离
 };
-\draw[flow] (ou) -- (meta);
+\draw[flow] (od) -- (noncausal);
 
 \begin{scope}[on background layer]
-  \node[draw=line,fill=paper,rounded corners=4pt,fit=(localq)(a2a)(globalq)(qkt)(scores)(av)(ou)(meta),
+  \node[draw=line,fill=paper,rounded corners=4pt,fit=(qd)(kdt)(scale)(logits)(softmax)(attn)(vd)(av)(od)(noncausal),
         inner xsep=12pt,inner ysep=22pt] {};
 \end{scope}
 
-% Stage 3: reverse communication and output projection
-\node[stage] at (-13.0,-9.35) {3. 恢复序列分片并执行 TP 输出投影};
+% Stage 3: restore packed order, concatenate heads, output projection
+\node[stage] at (-13.0,-9.55) {3. 合并文档与 56 个 Heads，执行输出投影};
 
-\node[tensor,fill=violetlight,minimum width=2.65cm] (oin) at (-10.85,-11.20) {$O^{(u)}$};
-\node[tinyshape,below=2pt of oin] {$[1,\,S,\,h_{tp}/u,\,128]$};
-\node[op,minimum width=2.2cm] (ra2a) at (-7.55,-11.20) {逆 Ulysses\\All-to-All};
-\draw[flow] (oin) -- node[above,note] {$h\rightarrow S$} (ra2a);
+\node[tensor,fill=violetlight,minimum width=2.70cm] (docs) at (-10.95,-11.20) {$\{O_{d,a}\}_{d=1}^{D}$};
+\node[tinyshape,below=2pt of docs] {按 packed 顺序恢复 $[T,56,128]$};
 
-\node[tensor,fill=violetlight,minimum width=2.55cm] (or) at (-4.25,-11.20) {$O_r$};
-\node[tinyshape,below=2pt of or] {$[S_r,\,h_{tp},\,128]$};
-\draw[flow] (ra2a) -- (or);
+\node[op,minimum width=2.0cm] (concat) at (-7.55,-11.20) {reshape +\\Concat heads};
+\draw[flow] (docs) -- (concat);
 
-\node[op] (reshape) at (-1.35,-11.20) {reshape};
-\draw[flow] (or) -- (reshape);
-\node[tensor,fill=violetlight,minimum width=2.65cm] (flat) at (1.55,-11.20) {$\overline O_r$};
-\node[tinyshape,below=2pt of flat] {$[S_r,\,h_{tp}\!\cdot\!128]$};
-\draw[flow] (reshape) -- (flat);
+\node[tensor,fill=violetlight,minimum width=2.80cm] (flat) at (-4.15,-11.20) {$\overline O$};
+\node[tinyshape,below=2pt of flat] {$[T,\,56\times128]=[T,7168]$};
+\draw[flow] (concat) -- (flat);
 
-\node[op,minimum width=2.25cm] (wo) at (4.75,-11.20) {RowParallel\\$W_O$};
-\draw[flow] (flat) -- (wo);
-\node[op,minimum width=1.75cm] (tpr) at (7.65,-11.20) {TP\\All-Reduce};
-\draw[flow] (wo) -- (tpr);
-\node[tensor,fill=teallight,minimum width=2.55cm] (y) at (10.65,-11.20) {$Y_r$};
-\node[tinyshape,below=2pt of y] {$[S_r,\,5376]$};
-\draw[flow] (tpr) -- (y);
+\node[tensor,fill=orangelight,minimum width=2.55cm,minimum height=1.55cm] (wo) at (-.65,-11.20) {$W_O$};
+\node[tinyshape,below=2pt of wo] {$[7168,\,5376]$};
+\node[font=\Large] at (-2.42,-11.20) {$\times$};
+\node[note] at (-2.42,-10.65) {收缩 $7168$};
+
+\node[op,minimum width=1.55cm] (mm) at (2.15,-11.20) {$\overline O W_O$};
+\draw[flow] (wo) -- (mm);
+
+\node[tensor,fill=teallight,minimum width=2.70cm,minimum height=1.42cm] (y) at (5.10,-11.20) {$Y$};
+\node[tinyshape,below=2pt of y] {$[T,\,5376]$};
+\draw[flow] (mm) -- (y);
+
+\node[draw=line,fill=paper,rounded corners=2pt,text width=4.4cm,align=left,font=\scriptsize]
+      (summary) at (9.40,-11.20) {
+  输出保持 packed token 顺序与隐藏维度不变；\\
+  每个 token 已聚合其所在文档内全部 key/value 信息
+};
+\draw[flow] (y) -- (summary);
 
 \begin{scope}[on background layer]
-  \node[draw=line,fill=paper,rounded corners=4pt,fit=(oin)(ra2a)(or)(reshape)(flat)(wo)(tpr)(y),
+  \node[draw=line,fill=paper,rounded corners=4pt,fit=(docs)(concat)(flat)(wo)(mm)(y)(summary),
         inner xsep=12pt,inner ysep=20pt] {};
 \end{scope}
 
-% Meaning box
-\node[meaning,anchor=north] (meaning) at (0,-13.10) {
-  \begin{tabular}{@{}p{2.0cm}p{23.1cm}@{}}
-  \textbf{轴} & $S$：全局 packed token 数；$S_r$：当前 Ulysses Rank 的序列行数；
-  $h=56$，$h_{tp}=56/p_{tp}$；$u$：Ulysses degree；$d_h=128$；隐藏维 $d=5376$。\\[5pt]
-  \textbf{对象} & $Q,K,V,O,Y$ 为 bf16 值张量；$A$ 为每头、每文档内部的注意力概率；
-  `cu\_seqlens` 为 packed 文档边界索引。MiniMax H3 此处是 MHA，因此 Q/K/V 头数相同。\\[5pt]
-  \textbf{机制} & TP 在头/投影维切分 QKV，RowParallel $W_O$ 后做 TP 归约；Ulysses 通过两次 All-to-All
-  在序列分片与头分片之间互换，使每个 Rank 用较少的头看到完整序列。图中单元格仅表达结构，不代表真实维数。\\
+% Meaning zone
+\node[meaning,anchor=north] (meaning) at (0,-13.15) {
+  \begin{tabular}{@{}p{2.0cm}p{23.2cm}@{}}
+  \textbf{轴} & $T$：全部 packed token 数；$D$：文档数；$S_d$：第 $d$ 个文档长度；
+  $a\in\{1,\ldots,56\}$：Attention Head；$d_h=128$；隐藏维 $d=5376$；注意力内部维度 $56\times128=7168$。\\[5pt]
+  \textbf{对象} & $Q,K,V,O,Y$ 为 bf16 值张量；$L$ 为未归一化 attention logits；$A$ 为沿 key 轴归一化的概率；
+  `cu\_seqlens` 是整数边界索引。此处是标准 MHA，Q/K/V 均为 56 个头。\\[5pt]
+  \textbf{机制} & $Q,K$ 先逐头 RMSNorm；主模型路径再对其前 96 维应用 3D RoPE，剩余 32 维直通。
+  Attention 非因果，但仅在各自 packed 文档内部执行，绝不跨越文档边界。图中单元格只表达轴结构，不代表真实维数。\\
   \end{tabular}
 };
 
 \node[font=\scriptsize,text=muted,anchor=north] at ($(meaning.south)+(0,-.20)$)
-  {MiniMax H3 Packed MHA（TP + Ulysses）@五道口纳什};
+  {MiniMax H3 Packed Multi-Head Attention@五道口纳什};
 
 \end{tikzpicture}
 \end{document}

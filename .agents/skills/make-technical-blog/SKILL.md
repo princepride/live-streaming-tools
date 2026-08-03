@@ -10,7 +10,7 @@ Work from the repository root containing `tech_blog_pipeline.py`.
 ## Prepare inputs
 
 1. Confirm the video or audio file and slide deck exist.
-2. Accept PDF, PPTX, PPSX, POTX, PPTM, PPSM, or POTM slides. Let the pipeline render PowerPoint inputs automatically.
+2. Accept one or more PDF, PPTX, PPSX, POTX, PPTM, PPSM, or POTM slide decks. Pass multiple decks as consecutive positional arguments after the media file; the pipeline combines them into one ordered, globally numbered evidence set while retaining each source filename and original page number. Let the pipeline render PowerPoint inputs automatically.
    - When every PowerPoint page is a single full-slide raster image, preserve the original embedded image instead of rasterizing it again. The pipeline will focus-crop decorative whitespace for the publishable blog asset while retaining the untouched source in its cache.
    - For other PowerPoint decks, render at the pipeline's high-resolution setting. Never upscale a previously downsampled blog asset when the source deck is available.
 3. Look for a matching `*_chapters_transcript.json` and reuse it with `--transcript-json` to avoid duplicate transcription.
@@ -30,7 +30,8 @@ Run:
 ```powershell
 python tech_blog_pipeline.py `
   "D:\path\video.mp4" `
-  "C:\path\slides.pptx" `
+  "C:\path\slides-part-1.pptx" `
+  "C:\path\slides-part-2.pptx" `
   --transcript-json "D:\path\video_chapters_transcript.json" `
   -o "tech_blog_output\topic_slug" `
   --workers 3 `

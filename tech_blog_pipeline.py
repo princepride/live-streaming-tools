@@ -544,6 +544,57 @@ def prepare_slides(slides: Path, root: Path) -> tuple[Path, list[str] | None, li
     return pdf_path, texts, source_images
 
 
+def prepare_slide_collection(
+    slide_decks: list[Path], root: Path,
+) -> tuple[Path, list[str], list[Path | None], list[dict[str, Any]]]:
+    """Prepare one or more decks as a single, globally numbered evidence set."""
+    prepared = [prepare_slides(deck, root) for deck in slide_decks]
+    key = stable_hash({
+        "decks": [file_fingerprint(deck) for deck in slide_decks],
+        "collection": "ordered-multi-deck-v1",
+    })[:20]
+    collection_dir = root / "cache" / "slide-collections" / key
+    merged_pdf = collection_dir / "slides.pdf"
+    combined_texts: list[str] = []
+    combined_sources: list[Path | None] = []
+    page_sources: list[dict[str, Any]] = []
+    merged = fitz.open()
+    global_page = 0
+    for deck_index, (deck, (pdf, texts, source_images)) in enumerate(
+        zip(slide_decks, prepared), 1
+    ):
+        document = fitz.open(pdf)
+        merged.insert_pdf(document)
+        page_count = len(document)
+        if texts is None:
+            deck_texts = [page.get_text("text").strip() for page in document]
+        else:
+            deck_texts = texts
+        if len(deck_texts) != page_count:
+            document.close()
+            merged.close()
+            raise RuntimeError(f"{deck.name} 的文字页数与渲染页数不一致")
+        combined_texts.extend(deck_texts)
+        if source_images:
+            combined_sources.extend(source_images)
+        else:
+            combined_sources.extend([None] * page_count)
+        for source_page in range(1, page_count + 1):
+            global_page += 1
+            page_sources.append({
+                "page": global_page,
+                "deck_index": deck_index,
+                "deck_name": deck.name,
+                "source_page": source_page,
+            })
+        document.close()
+    collection_dir.mkdir(parents=True, exist_ok=True)
+    if not merged_pdf.exists():
+        merged.save(merged_pdf, deflate=True)
+    merged.close()
+    return merged_pdf, combined_texts, combined_sources, page_sources
+
+
 def _focus_crop_slide(source: Image.Image) -> Image.Image:
     """Crop decorative slide whitespace while retaining the information area."""
     image = source.convert("RGB")
@@ -571,14 +622,17 @@ def _focus_crop_slide(source: Image.Image) -> Image.Image:
 
 
 def ingest_pdf(pdf: Path, root: Path, text_override: list[str] | None = None,
-               source_images: list[Path] | None = None) -> list[dict[str, Any]]:
+               source_images: list[Path | None] | None = None,
+               page_sources: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     pages_json = root / "cache" / "pdf_pages.json"
     assets = root / "assets" / "slides"
     vision = root / "cache" / "vision_slides"
     assets.mkdir(parents=True, exist_ok=True)
     vision.mkdir(parents=True, exist_ok=True)
     fingerprint = {"pdf": file_fingerprint(pdf), "text_override": stable_hash(text_override),
-                   "source_images": [file_fingerprint(path) for path in source_images or []],
+                   "source_images": [file_fingerprint(path) if path else None
+                                     for path in source_images or []],
+                   "page_sources": page_sources,
                    "asset_transform": "lossless-focus-crop-v1"}
     if pages_json.exists():
         stored = json.loads(pages_json.read_text(encoding="utf-8"))
@@ -590,8 +644,9 @@ def ingest_pdf(pdf: Path, root: Path, text_override: list[str] | None = None,
     for number, page in enumerate(document, 1):
         text = (text_override[number - 1] if text_override else page.get_text("text")).strip()
         final_image = assets / f"slide-{number:02d}.png"
-        if source_images:
-            with Image.open(source_images[number - 1]) as original:
+        source_image = source_images[number - 1] if source_images else None
+        if source_image:
+            with Image.open(source_image) as original:
                 focused = _focus_crop_slide(original)
                 focused.save(final_image, "PNG", optimize=True)
         else:
@@ -602,7 +657,8 @@ def ingest_pdf(pdf: Path, root: Path, text_override: list[str] | None = None,
             with Image.open(final_image) as source:
                 source.thumbnail((1100, 700), Image.Resampling.LANCZOS)
                 source.convert("RGB").save(vision_image, "JPEG", quality=78, optimize=True)
-        pages.append({"page": number, "text": text,
+        source = page_sources[number - 1] if page_sources else None
+        pages.append({"page": number, "text": text, "source": source,
                       "image": f"assets/slides/slide-{number:02d}.png",
                       "vision_image": str(vision_image)})
         log(f"  PDF 页面：{number}/{len(document)}")
@@ -633,7 +689,11 @@ def analyze_slide_batch(client: ModelClient, pages: list[dict[str, Any]], model:
     for page in pages:
         raw = Path(page["vision_image"]).read_bytes()
         data = base64.b64encode(raw).decode("ascii")
-        content.append({"type": "text", "text": f"第 {page['page']} 页，文本层：\n{page['text']}"})
+        source = page.get("source") or {}
+        source_label = (f"；来源文件 {source.get('deck_name')}，原始第 {source.get('source_page')} 页"
+                        if source else "")
+        content.append({"type": "text", "text":
+                        f"资料集第 {page['page']} 页{source_label}，文本层：\n{page['text']}"})
         content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{data}"}})
     result = client.chat(stage=f"slide-vision-{pages[0]['page']:02d}-{pages[-1]['page']:02d}",
                          model=model, messages=[{"role": "user", "content": content}],
@@ -721,7 +781,11 @@ def page_lines(pages: list[dict[str, Any]], analyses: list[dict[str, Any]], sele
         number = int(page["page"])
         if allowed is not None and number not in allowed:
             continue
-        rows.append(f"P{number:02d} 文本：{page['text']}\n视觉分析：{json.dumps(by_page.get(number, {}), ensure_ascii=False)}")
+        source = page.get("source") or {}
+        source_label = (f"（{source.get('deck_name')} 原始第 {source.get('source_page')} 页）"
+                        if source else "")
+        rows.append(f"P{number:02d}{source_label} 文本：{page['text']}\n"
+                    f"视觉分析：{json.dumps(by_page.get(number, {}), ensure_ascii=False)}")
     return "\n\n".join(rows)
 
 
@@ -960,8 +1024,16 @@ Hard requirements:
 Source Markdown:
 {article}
 """
-    return client.chat(stage=stage, model=model, messages=[{"role": "user", "content": prompt}],
-                       max_tokens=40000, reasoning="high", temperature=0.1)
+    translated = client.chat(stage=stage, model=model, messages=[{"role": "user", "content": prompt}],
+                             max_tokens=40000, reasoning="high", temperature=0.1)
+    # Models occasionally retain a Chinese ordinal before an otherwise fully translated
+    # heading (for example, ``## 一、The Background``). The ordinal is presentation
+    # structure rather than content, so remove it deterministically.
+    return re.sub(
+        r"(?m)^(#{1,6}\s+)[零一二三四五六七八九十百千]+、\s*",
+        r"\1",
+        translated,
+    )
 
 
 def translation_qa(source: str, translated: str) -> dict[str, Any]:
@@ -975,6 +1047,7 @@ def translation_qa(source: str, translated: str) -> dict[str, Any]:
         # Ignore Markdown image filenames so their page numbers are checked by image-path equality.
         value = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", value)
         # Ignore generated section/list numbering; it is presentation structure, not a factual anchor.
+        value = re.sub(r"(?m)^\s*#{1,6}\s+\d+(?:\.\d+)*\s+", "", value)
         value = re.sub(r"(?m)^\s*(?:#{1,6}\s+)?\d+[.)：:]\s+", "", value)
         value = value.replace(r"\,", ",")
         value = re.sub(
@@ -1033,7 +1106,8 @@ def main() -> int:
     global STYLE_PROFILE
     parser = argparse.ArgumentParser(description="把技术视频和 PPT/PDF 生成图文并茂的 Markdown 技术博客")
     parser.add_argument("media", type=Path, help="技术视频或音频")
-    parser.add_argument("slides", type=Path, help="对应的 PPTX/PPTM/PDF 幻灯片")
+    parser.add_argument("slides", type=Path, nargs="+",
+                        help="一个或多个对应的 PPTX/PPTM/PDF 幻灯片，按给定顺序合并分析")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("tech_blog_output"))
     parser.add_argument("--transcript-json", type=Path, help="复用现有带时间戳转写 JSON")
     parser.add_argument("--provider", choices=["openrouter", "codex"], default="openrouter",
@@ -1059,10 +1133,11 @@ def main() -> int:
 
     if not args.media.is_file():
         parser.error(f"找不到媒体文件：{args.media}")
-    if not args.slides.is_file():
-        parser.error(f"找不到 PDF：{args.slides}")
-    if args.slides.suffix.lower() not in {".pdf", ".pptx", ".ppsx", ".potx", ".pptm", ".ppsm", ".potm"}:
-        parser.error("幻灯片必须是 PDF、PPTX、PPSX、POTX、PPTM、PPSM 或 POTM")
+    for slide_deck in args.slides:
+        if not slide_deck.is_file():
+            parser.error(f"找不到幻灯片：{slide_deck}")
+        if slide_deck.suffix.lower() not in {".pdf", ".pptx", ".ppsx", ".potx", ".pptm", ".ppsm", ".potm"}:
+            parser.error("幻灯片必须是 PDF、PPTX、PPSX、POTX、PPTM、PPSM 或 POTM")
     if not 6 <= args.max_sections <= 9:
         parser.error("--max-sections 必须在 6 到 9 之间")
     api_key = None
@@ -1079,7 +1154,8 @@ def main() -> int:
         (root / folder).mkdir(parents=True, exist_ok=True)
     manifest = {
         "schema_version": SCHEMA_VERSION, "pipeline_version": PIPELINE_VERSION,
-        "media": file_fingerprint(args.media), "slides": file_fingerprint(args.slides),
+        "media": file_fingerprint(args.media),
+        "slides": [file_fingerprint(path) for path in args.slides],
         "provider": args.provider,
         "models": {"analyst": args.analyst_model, "writer": args.writer_model,
                    "critic": args.critic_model, "translation": args.translation_model,
@@ -1094,8 +1170,10 @@ def main() -> int:
         client = CodexClient(root / "cache", Path(__file__).resolve().parent, args.codex_model)
 
     log("[1/7] 提取并渲染 PPT")
-    prepared_slides, slide_texts, source_images = prepare_slides(args.slides, root)
-    pages = ingest_pdf(prepared_slides, root, slide_texts, source_images)
+    prepared_slides, slide_texts, source_images, page_sources = prepare_slide_collection(
+        args.slides, root
+    )
+    pages = ingest_pdf(prepared_slides, root, slide_texts, source_images, page_sources)
 
     transcript_path = find_transcript(args.media, args.transcript_json)
     if transcript_path:
@@ -1169,8 +1247,10 @@ def main() -> int:
                           args.reference_html if args.reference_html.exists() else None, review)
     qa["packaged_assets"] = packaged_assets
     atomic_json(root / "final" / "qa-report.json", qa)
+    slide_names = "、".join(path.name for path in args.slides)
     atomic_json(root / "final" / "sources.json", {
-        "media": str(args.media.resolve()), "slides": str(args.slides.resolve()),
+        "media": str(args.media.resolve()),
+        "slides": [str(path.resolve()) for path in args.slides],
         "transcript": str(transcript_path.resolve()) if transcript_path else "generated",
         "reference_style_only": str(args.reference_html.resolve()) if args.reference_html.exists() else None,
         "provider": args.provider,
@@ -1180,7 +1260,7 @@ def main() -> int:
     markdown_to_docx(
         final_path,
         docx_path,
-        source_label=f"配套材料：{args.slides.name}",
+        source_label=f"配套材料：{slide_names}",
     )
     qa["docx"] = audit_docx(docx_path)
     if not qa["docx"]["pass"]:
@@ -1189,7 +1269,7 @@ def main() -> int:
     markdown_to_pdf(
         final_path,
         pdf_path,
-        source_label=f"配套材料：{args.slides.name}",
+        source_label=f"配套材料：{slide_names}",
     )
     qa["pdf"] = audit_pdf(pdf_path, expected_images=qa["image_count"])
     if not qa["pdf"]["pass"]:
@@ -1213,12 +1293,14 @@ def main() -> int:
         english_docx = root / "final" / "blog.en.docx"
         markdown_to_docx(
             english_path, english_docx,
-            source_label="Source slides: user-provided slide deck", language="en",
+            source_label=f"Source slides: {', '.join(path.name for path in args.slides)}",
+            language="en",
         )
         english_pdf = root / "final" / "blog.en.pdf"
         markdown_to_pdf(
             english_path, english_pdf,
-            source_label="Source slides: user-provided slide deck", language="en",
+            source_label=f"Source slides: {', '.join(path.name for path in args.slides)}",
+            language="en",
         )
         qa["english"] = {
             "translation": english_qa,

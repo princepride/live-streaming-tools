@@ -18,7 +18,7 @@
 | 7 | AutoRound 加速 LLM/VLM 低比特量化部署 | [BV1etjE69Efx](https://www.bilibili.com/video/BV1etjE69Efx) | [配套资料目录](https://drive.google.com/drive/folders/1d0kx6WTJ-KHDMVjCsGvT64H4urwDL7_h) | |
 | 8 | veRL-Omni：多模态大模型强化学习 | [BV1qd7n6TEZk](https://www.bilibili.com/video/BV1qd7n6TEZk) | [veRL-Omni Slides](https://drive.google.com/file/d/1T534U3IEK5RzebGZ6sdhLQQ2tXH-pSho/view) | |
 | 9 | 当 vLLM 遇见 slime | [BV1LGMP6FEQa](https://www.bilibili.com/video/BV1LGMP6FEQa) | [RL Support in vLLM](https://drive.google.com/file/d/1tWhFjUy31CNHqaXp4_zvwt2pKJlvu09L/view) | |
-| 10 | KV Connector 的前世今生 | [BV1gRNF6PEc3](https://www.bilibili.com/video/BV1gRNF6PEc3) | [vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view) | |
+| 10 | KV Connector 的前世今生 | [BV1gRNF6PEc3](https://www.bilibili.com/video/BV1gRNF6PEc3) | [vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view) | [vllm_kv_connector](./tech_blog_output/vllm_kv_connector/final/blog.md) |
 | 11 | 让长序列 MoE RL 训练更好调 | [BV1WLKw6aEDq](https://www.bilibili.com/video/BV1WLKw6aEDq) | [配套讲义](https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view) | [long_sequence_moe_rl](./tech_blog_output/long_sequence_moe_rl/final/blog.md) |
 | 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [dspark_speculative_decoding](./tech_blog_output/dspark_speculative_decoding/final/blog.md) |
 | 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](./tech_blog_output/kimi_k3_vllm/final/blog.md) |
@@ -177,12 +177,13 @@ python batch_bilibili_chapters.py --force-chapters
 
 ### 3. 技术视频与 PPT 自动生成技术博客
 
-配套幻灯片可以直接使用 PDF、PPTX 或 PPTM；传入 PowerPoint 文件时，脚本会自动渲染并缓存页面，无需手工导出 PDF。
+配套幻灯片可以直接使用一个或多个 PDF、PPTX 或 PPTM；多个文件连续写在视频参数之后，脚本会按给定顺序合并为一个资料集，同时保留原文件名与原始页码。传入 PowerPoint 文件时，脚本会自动渲染并缓存页面，无需手工导出 PDF。
 
 ```powershell
 python tech_blog_pipeline.py `
   "D:\video.mp4" `
-  "D:\slides.pdf" `
+  "D:\slides-part-1.pptx" `
+  "D:\slides-part-2.pptx" `
   -o "D:\live-streaming-tools\tech_blog_output\my_blog"
 ```
 

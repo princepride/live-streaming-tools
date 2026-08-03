@@ -43,10 +43,12 @@ theme:
 nav:
   - 首页: index.md
   - 中文博客:
+      - vLLM KV Connector: vllm_kv_connector/final/blog.md
       - Kimi K3 day-0支持背后的技术细节: kimi_k3_vllm/final/blog.md
       - DSpark 投机解码: dspark_speculative_decoding/final/blog.md
       - 长序列 MoE RL: long_sequence_moe_rl/final/blog.md
   - English:
+      - vLLM KV Connector: vllm_kv_connector/final/blog.en.md
       - The technical details behind Kimi K3's Day-0 support: kimi_k3_vllm/final/blog.en.md
       - DSpark Speculative Decoding: dspark_speculative_decoding/final/blog.en.md
       - Long-Sequence MoE RL: long_sequence_moe_rl/final/blog.en.md

@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 17981,
+  "image_count": 7,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-06.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-19.png",
+    "assets/slides/slide-31.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_kv_connector\\final\\blog.docx",
+    "size": 1593901,
+    "pass": true,
+    "paragraphs": 232,
+    "headings": 40,
+    "numbered_paragraphs": 63,
+    "tables": 12,
+    "embedded_images": 7,
+    "media_parts": 7,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_kv_connector\\final\\blog.pdf",
+    "size": 2625281,
+    "pass": true,
+    "pages": 18,
+    "encrypted": false,
+    "embedded_image_xobjects": 7,
+    "expected_images": 7,
+    "pages_without_extractable_text": [],
+    "title": "解构 vLLM KV Connector：从调度解耦到全局零拷贝池化",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 17981,
+      "translated_chars": 43929,
+      "source_images": 7,
+      "translated_images": 7,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_kv_connector\\final\\blog.en.docx",
+      "size": 1594095,
+      "pass": true,
+      "paragraphs": 232,
+      "headings": 40,
+      "numbered_paragraphs": 63,
+      "tables": 12,
+      "embedded_images": 7,
+      "media_parts": 7,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_kv_connector\\final\\blog.en.pdf",
+      "size": 2146319,
+      "pass": true,
+      "pages": 22,
+      "encrypted": false,
+      "embedded_image_xobjects": 7,
+      "expected_images": 7,
+      "pages_without_extractable_text": [],
+      "title": "Deconstructing vLLM KV Connector: From Scheduling Decoupling to Global Zero-Copy Pooling",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}
