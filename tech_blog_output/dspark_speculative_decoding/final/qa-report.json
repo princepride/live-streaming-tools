@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16040,
+  "image_count": 8,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-09.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-15.png"
+  ],
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16041,
+      "translated_chars": 41535,
+      "source_images": 8,
+      "translated_images": 8,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\dspark_speculative_decoding\\final\\blog.en.docx",
+      "size": 1069299,
+      "pass": true,
+      "paragraphs": 232,
+      "headings": 46,
+      "numbered_paragraphs": 54,
+      "tables": 11,
+      "embedded_images": 8,
+      "media_parts": 8,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "unavailable: LibreOffice/Word renderer is not installed; structural, accessibility, media, and exact table-geometry audits passed",
+      "a11y_audit": {
+        "pass": true,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\dspark_speculative_decoding\\final\\blog.en.pdf",
+      "size": 1454953,
+      "pass": true,
+      "pages": 21,
+      "encrypted": false,
+      "embedded_image_xobjects": 8,
+      "expected_images": 8,
+      "pages_without_extractable_text": [],
+      "title": "Accelerating Large-Model Inference: Engineering Practice from Hidden-State Extraction to DSpark Speculative Decoding",
+      "visual_render_qa": "pass: all 21 pages rendered and visually inspected after special-glyph and table-separator fixes"
+    }
+  },
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\dspark_speculative_decoding\\final\\blog.docx",
+    "size": 1069187,
+    "pass": true,
+    "paragraphs": 232,
+    "headings": 46,
+    "numbered_paragraphs": 54,
+    "tables": 11,
+    "embedded_images": 8,
+    "media_parts": 8,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "unavailable: LibreOffice/Word renderer is not installed; structural, accessibility, media, and exact table-geometry audits passed",
+    "a11y_audit": {
+      "pass": true,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    }
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\dspark_speculative_decoding\\final\\blog.pdf",
+    "size": 1950156,
+    "pass": true,
+    "pages": 18,
+    "encrypted": false,
+    "embedded_image_xobjects": 8,
+    "expected_images": 8,
+    "pages_without_extractable_text": [],
+    "title": "大模型推理加速：从隐藏状态提取到 DSpark 投机解码的工程实践",
+    "visual_render_qa": "pass: all 18 pages rendered and visually inspected"
+  }
+}

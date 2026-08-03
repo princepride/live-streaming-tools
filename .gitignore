@@ -10,8 +10,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Local agent/runtime state
-.agents/
+# Local agent/runtime state (publish project Skills, ignore other runtime state)
+.agents/*
+!.agents/skills/
+!.agents/skills/**
 tmp/
 
 # Generated pipeline caches and outputs
@@ -26,10 +28,11 @@ references/
 !requirements.txt
 *.md
 !README.md
+!.agents/skills/**/SKILL.md
 *.docx
 *.pdf
 
-# Publishable blog artifacts (keep caches, drafts, manifests, and QA reports ignored)
+# Publishable blog artifacts (keep caches, drafts, and manifests ignored)
 !tech_blog_output/**/
 !tech_blog_output/**/final/blog.md
 !tech_blog_output/**/final/blog.docx
@@ -37,6 +40,7 @@ references/
 !tech_blog_output/**/final/blog.en.md
 !tech_blog_output/**/final/blog.en.docx
 !tech_blog_output/**/final/blog.en.pdf
+!tech_blog_output/**/final/qa-report.json
 !tech_blog_output/**/final/assets/
 !tech_blog_output/**/final/assets/**
 

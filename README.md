@@ -31,6 +31,29 @@
 
 生成过程通过 OpenRouter 调用语音转写、材料分析和写作模型。API 密钥只从环境变量读取，不会写入项目文件。
 
+## Codex Skills
+
+项目在 `.agents/skills/` 中提供三个可复用 Skill。使用 Codex 打开本仓库后，可在请求中直接点名：
+
+- `$make-video-chapters`：为单个视频/音频生成 B 站章节，或用 BBDown 下载并处理整个合集；默认校验最多 10 章、标题最多 16 个字符。
+- `$make-technical-blog`：将技术视频和 PDF/PPTX 等课件整理为带图片的中英文 Markdown、DOCX 与 PDF，并更新 README 博客索引。
+- `$validate-stream-artifacts`：确定性检查章节时间线，以及博客 Markdown 图片、DOCX 完整性、PDF 页面和中英文资源一致性，并指导逐页视觉复核。
+
+示例请求：
+
+```text
+使用 $make-video-chapters 给这个视频生成 B 站章节并校验。
+使用 $make-technical-blog 根据这个视频和 PPT 生成中英文技术博客。
+使用 $validate-stream-artifacts 检查 tech_blog_output/topic_slug 的全部成品。
+```
+
+验证脚本也可以独立执行：
+
+```powershell
+python .agents\skills\validate-stream-artifacts\scripts\validate_artifacts.py chapters "video_chapters.json"
+python .agents\skills\validate-stream-artifacts\scripts\validate_artifacts.py blog "tech_blog_output\topic_slug" --require-english
+```
+
 ## 环境准备
 
 ### 必需软件
@@ -187,6 +210,7 @@ Markdown 中的本地图片路径应相对于 Markdown 文件所在目录。
 
 ```text
 live-streaming-tools/
+├─ .agents/skills/               项目级 Codex Skills 与确定性校验脚本
 ├─ auto_chapters.py              单个视频或音频自动分章节
 ├─ batch_bilibili_chapters.py    B 站合集批量下载与分章节
 ├─ tech_blog_pipeline.py         技术博客主流水线
@@ -222,7 +246,7 @@ tech_blog_output/<项目名>/
 └─ run.json                      本次运行清单
 ```
 
-Git 默认只允许提交 `final` 下的中英文博客和配套图片；缓存、草稿、媒体文件、转写和临时检查文件仍会被忽略。
+Git 默认允许提交 `final` 下的中英文博客、配套图片和 `qa-report.json`；缓存、草稿、媒体文件、转写和临时检查文件仍会被忽略。
 
 ## 缓存与断点续跑
 

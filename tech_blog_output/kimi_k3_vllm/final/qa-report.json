@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 14298,
+  "image_count": 9,
+  "packaged_assets": [
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-05.png",
+    "assets/slides/slide-07.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-15.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-21.png",
+    "assets/slides/slide-22.png"
+  ],
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\kimi_k3_vllm\\final\\blog.docx",
+    "size": 1567759,
+    "pass": true,
+    "paragraphs": 202,
+    "headings": 34,
+    "numbered_paragraphs": 37,
+    "tables": 8,
+    "embedded_images": 9,
+    "media_parts": 9,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "accessibility_findings": 0,
+    "images_missing_alt": [],
+    "visual_render_qa": "not_available_no_libreoffice_or_word"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\kimi_k3_vllm\\final\\blog.pdf",
+    "size": 2527407,
+    "pass": true,
+    "pages": 16,
+    "encrypted": false,
+    "embedded_image_xobjects": 9,
+    "expected_images": 9,
+    "pages_without_extractable_text": [],
+    "title": "Kimi K3 推理后端演进：从混合架构到极致吞吐的系统重构",
+    "visual_render_qa": "pass_all_16_pages_at_110_dpi"
+  },
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。",
+    "DOCX 已完成结构、表格几何、资源完整性和可访问性检查；当前机器缺少 LibreOffice/Word，未执行逐页 PNG 视觉渲染。",
+    "PDF 已完整渲染为 16 页 PNG 并逐页检查：无裁切、重叠、缺图、孤页或不可读字体。"
+  ],
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 14298,
+      "translated_chars": 34686,
+      "source_images": 9,
+      "translated_images": 9,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": [
+        "2",
+        "2",
+        "2",
+        "50%",
+        "1"
+      ]
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\kimi_k3_vllm\\final\\blog.en.docx",
+      "size": 1567814,
+      "pass": true,
+      "paragraphs": 202,
+      "headings": 34,
+      "numbered_paragraphs": 37,
+      "tables": 8,
+      "embedded_images": 9,
+      "media_parts": 9,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "unavailable_no_libreoffice_or_word_converter",
+      "a11y_audit": {
+        "pass": true,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\kimi_k3_vllm\\final\\blog.en.pdf",
+      "size": 2082433,
+      "pass": true,
+      "pages": 19,
+      "encrypted": false,
+      "embedded_image_xobjects": 9,
+      "expected_images": 9,
+      "pages_without_extractable_text": [],
+      "title": "Kimi K3 Inference Backend Evolution: System Redesign from Hybrid Architecture to Maximum Throughput",
+      "visual_render_qa": "pass_all_19_pages_rendered_and_inspected_at_110_dpi"
+    }
+  }
+}

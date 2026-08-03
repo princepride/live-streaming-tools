@@ -1,0 +1,4 @@
+interface:
+  display_name: "校验生成成品"
+  short_description: "Validate chapter and blog outputs before publishing"
+  default_prompt: "Use $validate-stream-artifacts to validate the generated chapter and blog artifacts."

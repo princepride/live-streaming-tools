@@ -1,0 +1,4 @@
+interface:
+  display_name: "生成技术博客"
+  short_description: "Create bilingual technical blogs from video and slides"
+  default_prompt: "Use $make-technical-blog to turn my technical video and slides into a polished bilingual blog."

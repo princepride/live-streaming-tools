@@ -1,0 +1,4 @@
+interface:
+  display_name: "生成 B 站视频章节"
+  short_description: "Generate compliant chapters for media and Bilibili collections"
+  default_prompt: "Use $make-video-chapters to generate and validate Bilibili chapters for my media."
