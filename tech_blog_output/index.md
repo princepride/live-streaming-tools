@@ -8,10 +8,8 @@
       <a class="md-button" href="https://drive.google.com/drive/folders/1YQ3C025p5DzNPLaxa_dQ10P7hnfcqcp8">浏览 Google Drive 课件</a>
     </div>
   </div>
-  <div class="vllm-mascot" aria-label="vLLM 看板娘">
-    <div class="vllm-mascot__note"><span>01</span> PAGED ATTENTION</div>
-    <img src="assets/branding/vllm-mascot-hero.png" alt="银发眼镜、手持技术资料的 vLLM 看板娘">
-    <div class="vllm-mascot__status"><i></i><span>vLLM NOTES</span><b>READY</b></div>
+  <div class="vllm-mascot" aria-label="两位 vLLM 看板娘一起学习">
+    <img src="assets/branding/vllm-mascots-study.png" alt="银发与黑橙发的两位 vLLM 看板娘一起阅读技术资料并讨论电脑内容">
   </div>
 </section>
 

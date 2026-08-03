@@ -50,7 +50,7 @@ references/
 !tech_blog_output/javascripts/**
 !tech_blog_output/assets/
 !tech_blog_output/assets/branding/
-!tech_blog_output/assets/branding/vllm-mascot-hero.png
+!tech_blog_output/assets/branding/vllm-mascots-study.png
 
 # Local MkDocs build output
 site/
