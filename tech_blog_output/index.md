@@ -21,20 +21,9 @@
 
 <div class="grid cards" markdown>
 
--   <span class="article-kicker">KV CACHE · DISTRIBUTED INFERENCE</span>
-
-    **解构 vLLM KV Connector**
-
-    ---
-
-    从 v0 到 v1 的调度解耦出发，拆解逐层传输、请求级异步、L2 预取，以及 LMCache 与 Mooncake 的零拷贝全局池化实践。
-
-    [阅读中文](vllm_kv_connector/final/blog.md)
-    · [English](vllm_kv_connector/final/blog.en.md)
-
 -   <span class="article-kicker">ARCHITECTURE · MEMORY</span>
 
-    **Kimi K3 推理后端演进**
+    **Kimi K3 day-0支持背后的技术细节**
 
     ---
 
@@ -53,6 +42,17 @@
 
     [阅读中文](dspark_speculative_decoding/final/blog.md)
     · [English](dspark_speculative_decoding/final/blog.en.md)
+
+-   <span class="article-kicker">KV CACHE · DISTRIBUTED INFERENCE</span>
+
+    **解构 vLLM KV Connector**
+
+    ---
+
+    从 v0 到 v1 的调度解耦出发，拆解逐层传输、请求级异步、L2 预取，以及 LMCache 与 Mooncake 的零拷贝全局池化实践。
+
+    [阅读中文](vllm_kv_connector/final/blog.md)
+    · [English](vllm_kv_connector/final/blog.en.md)
 
 -   <span class="article-kicker">TRAINING SYSTEMS</span>
 
