@@ -8,19 +8,10 @@
       <a class="md-button" href="https://drive.google.com/drive/folders/1YQ3C025p5DzNPLaxa_dQ10P7hnfcqcp8">浏览 Google Drive 课件</a>
     </div>
   </div>
-  <div class="vllm-engine" aria-label="vLLM 推理流水线示意">
-    <div class="vllm-engine__title"><span></span> vLLM ENGINE <b>RUNNING</b></div>
-    <div class="vllm-flow">
-      <div><small>01</small><strong>REQUESTS</strong><span>prompt queue</span></div>
-      <i>→</i>
-      <div><small>02</small><strong>SCHEDULER</strong><span>continuous batch</span></div>
-      <i>→</i>
-      <div><small>03</small><strong>KV BLOCKS</strong><span>paged memory</span></div>
-      <i>→</i>
-      <div><small>04</small><strong>DECODE</strong><span>token stream</span></div>
-    </div>
-    <div class="vllm-tokens" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-    <div class="vllm-stats"><span>KV CACHE <b>86%</b></span><span>ACTIVE SEQS <b>128</b></span><span>OUTPUT <b>STREAMING</b></span></div>
+  <div class="vllm-mascot" aria-label="vLLM 看板娘">
+    <div class="vllm-mascot__note"><span>01</span> PAGED ATTENTION</div>
+    <img src="assets/branding/vllm-mascot-hero.png" alt="银发眼镜、手持技术资料的 vLLM 看板娘">
+    <div class="vllm-mascot__status"><i></i><span>vLLM NOTES</span><b>READY</b></div>
   </div>
 </section>
 

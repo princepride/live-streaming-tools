@@ -48,6 +48,9 @@ references/
 !tech_blog_output/stylesheets/**
 !tech_blog_output/javascripts/
 !tech_blog_output/javascripts/**
+!tech_blog_output/assets/
+!tech_blog_output/assets/branding/
+!tech_blog_output/assets/branding/vllm-mascot-hero.png
 
 # Local MkDocs build output
 site/
