@@ -23,6 +23,21 @@
 | 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [dspark_speculative_decoding](./tech_blog_output/dspark_speculative_decoding/final/blog.md) |
 | 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](./tech_blog_output/kimi_k3_vllm/final/blog.md) |
 
+## 在线技术博客
+
+全部中英文博客通过 MkDocs Material 发布到：
+
+- [https://princepride.github.io/live-streaming-tools/](https://princepride.github.io/live-streaming-tools/)
+
+本地预览：
+
+```powershell
+python -m pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+打开 `http://127.0.0.1:8000/` 即可预览。推送 `main` 分支中与博客站点相关的改动后，`.github/workflows/pages.yml` 会自动构建并发布 GitHub Pages；首次使用时需要在仓库 **Settings → Pages → Build and deployment** 中将 Source 设为 **GitHub Actions**。
+
 一套面向技术视频的本地自动化工具，主要完成三类任务：
 
 1. 为单个视频或音频生成适用于 B 站的章节信息。

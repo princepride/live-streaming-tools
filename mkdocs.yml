@@ -1,0 +1,89 @@
+site_name: vLLM 小课堂技术博客
+site_description: 从技术视频与课件整理而来的中英文深度技术文章
+site_url: https://princepride.github.io/live-streaming-tools/
+repo_url: https://github.com/princepride/live-streaming-tools
+repo_name: princepride/live-streaming-tools
+
+docs_dir: tech_blog_output
+site_dir: site
+
+exclude_docs: |
+  **/cache/**
+  **/drafts/**
+  **/run.json
+  **/final/*.docx
+  **/final/*.pdf
+  **/final/qa-report.json
+  **/final/sources.json
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色模式
+
+nav:
+  - 首页: index.md
+  - 中文博客:
+      - Kimi K3 推理后端演进: kimi_k3_vllm/final/blog.md
+      - DSpark 投机解码: dspark_speculative_decoding/final/blog.md
+      - 长序列 MoE RL: long_sequence_moe_rl/final/blog.md
+  - English:
+      - Kimi K3 Inference Backend: kimi_k3_vllm/final/blog.en.md
+      - DSpark Speculative Decoding: dspark_speculative_decoding/final/blog.en.md
+      - Long-Sequence MoE RL: long_sequence_moe_rl/final/blog.en.md
+
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+copyright: 内容来自 vLLM 小课堂技术分享，本站由 MkDocs 构建

@@ -1,0 +1,44 @@
+:root {
+  --md-text-font: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --md-code-font: "JetBrains Mono", "Cascadia Code", monospace;
+}
+
+.md-grid {
+  max-width: 78rem;
+}
+
+.md-content__inner {
+  padding-bottom: 3rem;
+}
+
+.md-typeset h1 {
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h2 {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  padding-bottom: 0.35rem;
+}
+
+.md-typeset img {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.55rem;
+  box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.08);
+}
+
+.md-typeset .grid.cards > ul > li {
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0.5rem 1.4rem rgba(0, 0, 0, 0.10);
+}
+
+@media screen and (min-width: 60em) {
+  .md-typeset p,
+  .md-typeset li {
+    line-height: 1.85;
+  }
+}

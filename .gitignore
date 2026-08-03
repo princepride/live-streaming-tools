@@ -25,7 +25,7 @@ references/
 # Generated reports, transcripts and documents
 *.json
 *.txt
-!requirements.txt
+!requirements*.txt
 *.md
 !README.md
 !.agents/skills/**/SKILL.md
@@ -43,6 +43,14 @@ references/
 !tech_blog_output/**/final/qa-report.json
 !tech_blog_output/**/final/assets/
 !tech_blog_output/**/final/assets/**
+!tech_blog_output/index.md
+!tech_blog_output/stylesheets/
+!tech_blog_output/stylesheets/**
+!tech_blog_output/javascripts/
+!tech_blog_output/javascripts/**
+
+# Local MkDocs build output
+site/
 
 # Source media and extracted audio
 *.mp4
