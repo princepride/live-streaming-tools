@@ -1,15 +1,40 @@
-# vLLM 小课堂技术博客
+<section class="vllm-hero">
+  <div class="vllm-hero__copy">
+    <p class="vllm-eyebrow">vLLM SYSTEMS NOTES</p>
+    <h1><span class="vllm-title-primary">把每一次技术分享</span><br><span class="vllm-title-gradient">整理成可检索的系统知识</span></h1>
+    <p class="vllm-lead">从视频与课件出发，沿着模型架构、内存管理、调度策略和 Kernel 优化的因果链，沉淀面向 AI 系统工程师的中英文深度文章。</p>
+    <div class="vllm-actions">
+      <a class="md-button md-button--primary" href="https://space.bilibili.com/189708420/lists?sid=8336139">观看 B 站合集</a>
+      <a class="md-button" href="https://drive.google.com/drive/folders/1YQ3C025p5DzNPLaxa_dQ10P7hnfcqcp8">浏览 Google Drive 课件</a>
+    </div>
+  </div>
+  <div class="vllm-engine" aria-label="vLLM 推理流水线示意">
+    <div class="vllm-engine__title"><span></span> vLLM ENGINE <b>RUNNING</b></div>
+    <div class="vllm-flow">
+      <div><small>01</small><strong>REQUESTS</strong><span>prompt queue</span></div>
+      <i>→</i>
+      <div><small>02</small><strong>SCHEDULER</strong><span>continuous batch</span></div>
+      <i>→</i>
+      <div><small>03</small><strong>KV BLOCKS</strong><span>paged memory</span></div>
+      <i>→</i>
+      <div><small>04</small><strong>DECODE</strong><span>token stream</span></div>
+    </div>
+    <div class="vllm-tokens" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="vllm-stats"><span>KV CACHE <b>86%</b></span><span>ACTIVE SEQS <b>128</b></span><span>OUTPUT <b>STREAMING</b></span></div>
+  </div>
+</section>
 
-这里收录从技术视频和配套课件中整理出的深度技术文章。每篇文章均提供中文与英文版本，并保留关键幻灯片、计算过程和工程背景。
-
-[B 站视频合集](https://space.bilibili.com/189708420/lists?sid=8336139){ .md-button .md-button--primary }
-[Google Drive 课件](https://drive.google.com/drive/folders/1YQ3C025p5DzNPLaxa_dQ10P7hnfcqcp8){ .md-button }
+<div class="vllm-topics">
+  <span>PagedAttention</span><span>Continuous Batching</span><span>KV Cache</span><span>Speculative Decoding</span><span>MoE Serving</span>
+</div>
 
 ## 最新文章
 
 <div class="grid cards" markdown>
 
--   **Kimi K3 推理后端演进**
+-   <span class="article-kicker">ARCHITECTURE · MEMORY</span>
+
+    **Kimi K3 推理后端演进**
 
     ---
 
@@ -18,7 +43,9 @@
     [阅读中文](kimi_k3_vllm/final/blog.md)
     · [English](kimi_k3_vllm/final/blog.en.md)
 
--   **DSpark 投机解码**
+-   <span class="article-kicker">SPECULATIVE DECODING</span>
+
+    **DSpark 投机解码**
 
     ---
 
@@ -27,7 +54,9 @@
     [阅读中文](dspark_speculative_decoding/final/blog.md)
     · [English](dspark_speculative_decoding/final/blog.en.md)
 
--   **长序列 MoE RL**
+-   <span class="article-kicker">TRAINING SYSTEMS</span>
+
+    **长序列 MoE RL**
 
     ---
 
