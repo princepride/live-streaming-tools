@@ -2,6 +2,8 @@
 
 > 从纯 HTTP Rollout 到控制流解耦，解析大模型 RL 系统的高效扩展之路
 
+**原视频**：[当 vLLM 遇见 slime](https://www.bilibili.com/video/BV1LGMP6FEQa) · **配套资料**：[RL Support in vLLM](https://drive.google.com/file/d/1tWhFjUy31CNHqaXp4_zvwt2pKJlvu09L/view)
+
 当 RL 后训练框架的代码量从一万行膨胀到十万行，二次开发效率便与功能完备性产生了正面冲突。vime 项目试图用另一条路径化解这一矛盾：将极简 RL 调度器 slime 与高吞吐推理引擎 vLLM 通过纯 HTTP 协议对接，在保持可读性的同时获得生产级推理能力。本文沿着"架构选型 → 分支维护 → 大规模扩展 → 智能体训练"的因果链，完整拆解 vime 的设计决策、工程实践和在 SWE-bench 上的实测数据。
 
 ---

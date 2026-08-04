@@ -1,5 +1,7 @@
 # 32 张 H100 承载 128K MoE RL：显存解耦、通信重叠与配置收敛
 
+**原视频**：[让长序列 MoE RL 训练更好调](https://www.bilibili.com/video/BV1WLKw6aEDq) · **配套资料**：[配套讲义](https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view)
+
 *以 Qwen3.5-35B-A3B 为例，拆解一条从 127.53 TFLOPS/GPU 基线推进到接近 190 TFLOPS/GPU 的组合优化路径。*
 
 强化学习训练需要频繁调整 reward、rollout、数据配方和超参数。如果每组实验都要重新盲扫并行配置，系统试错成本很可能先于算法验证成本失控。

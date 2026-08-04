@@ -57,6 +57,35 @@ Omit `--transcript-json` only with the OpenRouter backend. Use `--no-english` on
 
 Allow the pipeline to execute slide analysis, evidence extraction, causal outlining, parallel drafting, global editing, independent review, repair, translation, asset packaging, and deterministic QA. Resume the same command after interruption so cache keys remain useful.
 
+## Add the source header
+
+Every blog opens with a line linking back to the original video and its companion materials. Take both URLs from the matching README index row and add the line to `blog.md` and `blog.en.md`:
+
+```markdown
+**原视频**：[<README 主题>](<bilibili URL>) · **配套资料**：[<README 资料标题>](<Drive URL>)
+```
+
+```markdown
+**Source video**: [Bilibili <BV id>](<bilibili URL>) · **Slides**: [<README 资料标题>](<Drive URL>)
+```
+
+Place it after the `# ` title and after the subtitle blockquote when one is present, as a plain paragraph. Two constraints drive this:
+
+- The DOCX and PDF builders treat the first blockquote following the title as the cover subtitle and lift it out of the body, so writing this line as a blockquote would hijack the cover.
+- Keep it a single line. Both builders render each `>` line and each paragraph separately, so a multi-line block turns into stacked boxes.
+
+Regenerate the four binaries after editing the Markdown, otherwise the DOCX and PDF no longer match the published text. Reuse the pipeline's own labels — `配套材料：<slide filenames joined by 、>` for Chinese and `Source slides: <slide filenames joined by ', '>` for English, both recoverable from `final/sources.json`:
+
+```python
+from blog_docx import markdown_to_docx
+from blog_pdf import markdown_to_pdf
+
+markdown_to_docx(final / "blog.md", final / "blog.docx", source_label=zh_label)
+markdown_to_pdf(final / "blog.md", final / "blog.pdf", source_label=zh_label)
+markdown_to_docx(final / "blog.en.md", final / "blog.en.docx", source_label=en_label, language="en")
+markdown_to_pdf(final / "blog.en.md", final / "blog.en.pdf", source_label=en_label, language="en")
+```
+
 ## Verify the deliverables
 
 Run:

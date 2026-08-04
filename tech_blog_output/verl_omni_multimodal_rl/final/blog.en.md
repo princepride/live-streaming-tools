@@ -1,5 +1,7 @@
 # Core Architecture of VeRL-Omni: System-Level Optimization for Multimodal Reinforcement Learning
 
+**Source video**: [Bilibili BV1qd7n6TEZk](https://www.bilibili.com/video/BV1qd7n6TEZk) · **Slides**: [veRL-Omni Slides](https://drive.google.com/file/d/1T534U3IEK5RzebGZ6sdhLQQ2tXH-pSho/view)
+
 When the training target of reinforcement learning expands from text-only large language models to diffusion models and omni-modal models, the computational characteristics of both the generation and evaluation stages undergo a qualitative shift. Traditional frameworks are designed around the assumption of "fast autoregressive sampling + lightweight rule-based rewards." Once confronted with multi-step denoising trajectories and heavy vision-language rewards, pipeline stalls and resource idling quickly follow. VeRL-Omni is an independent framework split from VeRL precisely to address this structural mismatch—through three core optimizations—asynchronous reward streaming, step-wise continuous batching, and rollout calibration—it compresses per-step training time from 190 s to 152 s on the Qwen-Image scenario, yielding approximately a 20% end-to-end throughput improvement.
 
 This article follows the causal chain of "bottleneck identification → architecture design → layer-by-layer optimization → algorithm mapping → performance validation," providing a thorough analysis of the engineering decisions and technical trade-offs behind this system.

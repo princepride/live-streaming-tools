@@ -1,5 +1,7 @@
 # Running 128K-Sequence MoE RL on 32 H100s: Memory Decoupling, Communication Overlap, and Configuration Convergence
 
+**Source video**: [Bilibili BV1WLKw6aEDq](https://www.bilibili.com/video/BV1WLKw6aEDq) · **Slides**: [配套讲义](https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view)
+
 *Using Qwen3.5-35B-A3B as an example, this article breaks down a combined optimization path from a 127.53 TFLOPS/GPU baseline to nearly 190 TFLOPS/GPU.*
 
 Reinforcement learning requires frequent adjustments to rewards, rollouts, data recipes, and hyperparameters. If every experiment requires a new blind search over parallel configurations, the cost of systems-level trial and error may spiral out of control before the cost of algorithm validation does.

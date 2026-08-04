@@ -2,6 +2,8 @@
 
 > 深度解析 vLLM 在 KDA 与 LatentMoE 架构下的内存管理与算子优化
 
+**原视频**：[Day-0 Kimi K3 Support](https://www.bilibili.com/video/BV11z3m63ECo) · **配套资料**：[Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view)
+
 Kimi K3 将总参数量从 1.04T 推高到 2.78T，同时引入了 KDA 与 LatentMoE 两项新架构。这种混合设计在模型层面控制了通信和内存开销，却在推理系统层面引发了一连串级联故障——KV Cache 的追加写入假设被打破、物理块大小被迫膨胀到 6 000+ token、前缀缓存命中率断崖式下跌。本文沿着"模型架构 → 内存分配 → 缓存策略 → 算子执行 → 性能验证"的因果链，完整拆解 vLLM 团队在工程层面的应对方案。
 
 **适读人群**：具备大模型推理基础，关注 vLLM 框架、KV Cache 管理及底层算子优化的后端与 AI 系统工程师。

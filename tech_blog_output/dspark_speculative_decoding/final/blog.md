@@ -1,5 +1,7 @@
 # 大模型推理加速：从隐藏状态提取到 DSpark 投机解码的工程实践
 
+**原视频**：[DSpark：投机解码详解](https://www.bilibili.com/video/BV18E3u63EdR) · **配套资料**：[DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view)
+
 大模型自回归生成的核心瓶颈众所周知——每步只产出一个 token，每步都要把全部参数从显存搬到计算单元，GPU 算力大量闲置。投机解码（Speculative Decoding）通过"小模型猜、大模型验"的范式打破了这一局面，但草稿质量不够高、隐藏状态获取成本过大、集群部署链路不通等工程矛盾，使得真正落地远比算法论文描述的复杂。
 
 本文围绕 Speculators 库与 DSpark 算法，拆解从 Drafter 训练到 vLLM 原生部署的端到端链路：算法层面，DSpark 如何用 Markov Head 以不到 1.3% 的延迟代价换回 18–30% 的接受长度增益；工程层面，在线隐藏状态提取如何复用 KVConnector 管道、Mooncake Store 如何补齐跨节点传输的最后一环。

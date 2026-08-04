@@ -1,5 +1,7 @@
 # 解构 vLLM KV Connector：从调度解耦到全局零拷贝池化
 
+**原视频**：[KV Connector 的前世今生](https://www.bilibili.com/video/BV1gRNF6PEc3) · **配套资料**：[vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view)
+
 当大模型推理从单轮问答走向多轮 Agent 交互，KV Cache 的规模随对话轮次持续膨胀，单机显存很快捉襟见肘。将 KV Cache 搬出引擎、跨节点共享、按需加载——这件事听起来直觉明了，工程上却要求推理引擎在调度、传输和存储三个维度同时给出干净的抽象。vLLM 的 KV Connector 正是为此而生的接口层。本文沿着它从 v0 到 v1 的架构演进，逐层拆解异步传输的三种范式，最终落脚到 LMCache 与 Mooncake 两个生态系统如何借助 CudaIPC 和 GPUDirect RDMA 实现零拷贝全局池化。
 
 **适读人群：** 具有一定大模型推理基础，希望深入了解 vLLM 底层架构、KV Cache 优化机制及分布式存储系统集成的后端工程师与系统架构师。

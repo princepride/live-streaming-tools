@@ -2,6 +2,8 @@
 
 > An in-depth analysis of vLLM's memory management and operator optimization under the KDA and LatentMoE architectures
 
+**Source video**: [Bilibili BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) · **Slides**: [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view)
+
 Kimi K3 pushes total parameter count from 1.04T to 2.78T while introducing two new architectural elements: KDA and LatentMoE. This hybrid design controls communication and memory overhead at the model level, yet triggers a cascade of failures at the inference-system level—the append-only assumption for KV Cache writes is violated, physical block sizes are forced to balloon beyond 6,000 tokens, and prefix cache hit rates plummet. This article traces the full causal chain—"model architecture → memory allocation → caching strategy → operator execution → performance validation"—to dissect the vLLM team's engineering countermeasures end to end.
 
 **Target audience**: Backend and AI systems engineers with a foundation in large-model inference who are interested in the vLLM framework, KV Cache management, and low-level operator optimization.

@@ -1,5 +1,7 @@
 # Accelerating Large-Model Inference: Engineering Practice from Hidden-State Extraction to DSpark Speculative Decoding
 
+**Source video**: [Bilibili BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) · **Slides**: [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view)
+
 The core bottleneck of autoregressive generation in large models is well known—each step produces only a single token, each step requires moving all parameters from GPU memory to the compute units, and vast GPU compute capacity sits idle. Speculative decoding breaks through this bottleneck with a "small model drafts, large model verifies" paradigm, yet engineering tensions—insufficient draft quality, prohibitive hidden-state extraction costs, and incomplete cluster deployment pipelines—make real-world deployment far more complex than algorithm papers suggest.
 
 This article dissects the end-to-end pipeline from Drafter training to native vLLM deployment, centering on the Speculators library and the DSpark algorithm. On the algorithm side, we examine how DSpark uses a Markov Head to trade less than 1.3% latency overhead for an 18–30% gain in acceptance length. On the engineering side, we explore how online hidden-state extraction reuses the KVConnector pipeline and how Mooncake Store closes the last mile of cross-node transfer.

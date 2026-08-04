@@ -2,6 +2,8 @@
 
 > From Pure HTTP Rollout to Control-Flow Decoupling: Dissecting the Path to Efficient Scaling for Large-Model RL Systems
 
+**Source video**: [Bilibili BV1LGMP6FEQa](https://www.bilibili.com/video/BV1LGMP6FEQa) · **Slides**: [RL Support in vLLM](https://drive.google.com/file/d/1tWhFjUy31CNHqaXp4_zvwt2pKJlvu09L/view)
+
 When the codebase of an RL post-training framework balloons from ten thousand lines to a hundred thousand, secondary-development efficiency comes into direct conflict with feature completeness. The vime project attempts to resolve this tension through an alternative path: bridging the minimalist RL scheduler slime with the high-throughput inference engine vLLM via a pure HTTP protocol, achieving production-grade inference capability while preserving readability. This article follows the causal chain of "architecture selection → branch maintenance → large-scale scaling → agent training" to provide a complete teardown of vime's design decisions, engineering practices, and empirical results on SWE-bench.
 
 ---

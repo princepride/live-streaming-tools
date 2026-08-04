@@ -1,5 +1,7 @@
 # Deconstructing vLLM KV Connector: From Scheduling Decoupling to Global Zero-Copy Pooling
 
+**Source video**: [Bilibili BV1gRNF6PEc3](https://www.bilibili.com/video/BV1gRNF6PEc3) · **Slides**: [vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view)
+
 As large-model inference evolves from single-turn Q&A to multi-turn agent interactions, KV Cache size continuously balloons with each conversation turn, quickly exhausting single-node GPU memory. Moving KV Cache out of the engine, sharing it across nodes, and loading it on demand—this sounds intuitively straightforward, yet engineering-wise it demands that the inference engine simultaneously provide clean abstractions across three dimensions: scheduling, transport, and storage. vLLM's KV Connector is the interface layer purpose-built for exactly this. This article traces its architectural evolution from v0 to v1, dissects the three paradigms of asynchronous transfer layer by layer, and ultimately examines how two ecosystem projects—LMCache and Mooncake—achieve zero-copy global pooling via CudaIPC and GPUDirect RDMA.
 
 **Target Audience:** Backend engineers and system architects with a working knowledge of large-model inference who wish to gain a deep understanding of vLLM's underlying architecture, KV Cache optimization mechanisms, and distributed storage system integration.
