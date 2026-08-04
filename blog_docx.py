@@ -160,16 +160,55 @@ INLINE_PATTERN = re.compile(
 )
 
 
+MACRO_TEXT = {
+    "alpha": "α", "beta": "β", "gamma": "γ", "delta": "δ", "epsilon": "ε",
+    "varepsilon": "ε", "zeta": "ζ", "eta": "η", "theta": "θ", "iota": "ι",
+    "kappa": "κ", "lambda": "λ", "mu": "μ", "nu": "ν", "xi": "ξ", "pi": "π",
+    "rho": "ρ", "sigma": "σ", "tau": "τ", "upsilon": "υ", "phi": "φ",
+    "varphi": "φ", "chi": "χ", "psi": "ψ", "omega": "ω",
+    "Gamma": "Γ", "Delta": "Δ", "Theta": "Θ", "Lambda": "Λ", "Xi": "Ξ",
+    "Pi": "Π", "Sigma": "Σ", "Phi": "Φ", "Psi": "Ψ", "Omega": "Ω",
+    "mid": "|", "in": "∈", "notin": "∉", "infty": "∞", "partial": "∂",
+    "nabla": "∇", "pm": "±", "mp": "∓", "neq": "≠", "equiv": "≡",
+    "propto": "∝", "sim": "~", "to": "→", "rightarrow": "→",
+    "leftarrow": "←", "Rightarrow": "⇒", "langle": "⟨", "rangle": "⟩",
+    "ldots": "…", "dots": "…", "cdots": "…", "sum": "Σ", "prod": "Π",
+    "int": "∫", "sqrt": "√", "forall": "∀", "exists": "∃",
+    "bigl": "", "bigr": "", "Bigl": "", "Bigr": "", "biggl": "", "biggr": "",
+    "quad": " ", "qquad": "  ", "displaystyle": "",
+    # Standard operator names render as themselves, minus the backslash.
+    **{name: name for name in (
+        "log", "ln", "exp", "min", "max", "arg", "det", "dim", "gcd",
+        "sin", "cos", "tan", "lim", "sup", "inf", "deg", "ker",
+    )},
+}
+_MACRO_PATTERN = re.compile(r"\\([A-Za-z]+)")
+_OPEN_BRACE, _CLOSE_BRACE = "\x01", "\x02"
+
+
 def latex_to_plain(value: str) -> str:
     """Convert the small LaTeX subset emitted by the writing pipeline to readable text."""
     value = value.strip()
     for opening, closing in ((r"\[", r"\]"), ("$$", "$$"), (r"\(", r"\)")):
         if value.startswith(opening) and value.endswith(closing):
             value = value[len(opening):-len(closing)].strip()
-    value = re.sub(r"\\(?:text|operatorname)\{([^{}]*)\}", r"\1", value)
+    # Escaped braces are literal characters, not grouping. Park them so the
+    # grouping-aware passes below see only real LaTeX groups.
+    value = value.replace(r"\{", _OPEN_BRACE).replace(r"\}", _CLOSE_BRACE)
+    while True:
+        unwrapped = re.sub(r"\\(?:text|operatorname|mathrm|mathbf)\{([^{}]*)\}", r"\1", value)
+        if unwrapped == value:
+            break
+        value = unwrapped
     value = value.replace(r"\_", "_")
-    value = re.sub(r"_\{([^{}]*)\}", r"_\1", value)
-    value = re.sub(r"\^\{([^{}]*)\}", r"^\1", value)
+    # Collapse sub/superscripts repeatedly: one pass leaves the outer group of a
+    # nested script (p_{\theta_{old}}) intact, which then defeats \frac matching.
+    while True:
+        scripted = re.sub(r"_\{([^{}]*)\}", r"_\1", value)
+        scripted = re.sub(r"\^\{([^{}]*)\}", r"^\1", scripted)
+        if scripted == value:
+            break
+        value = scripted
     fraction = re.compile(r"\\frac\{([^{}]*)\}\{([^{}]*)\}")
     while fraction.search(value):
         value = fraction.sub(lambda match: f"({match.group(1)}) / ({match.group(2)})", value)
@@ -177,8 +216,11 @@ def latex_to_plain(value: str) -> str:
     value = value.replace(r"\times", " × ").replace(r"\cdot", " · ")
     value = value.replace(r"\approx", "≈").replace(r"\le", "≤").replace(r"\ge", "≥")
     value = value.replace(r"\;", " ").replace(r"\,", " ").replace(r"\ ", " ")
-    value = value.replace(r"\left", "").replace(r"\right", "")
+    value = value.replace(r"\!", "").replace(r"\left", "").replace(r"\right", "")
+    value = _MACRO_PATTERN.sub(
+        lambda match: MACRO_TEXT.get(match.group(1), match.group(0)), value)
     value = value.replace("{", "").replace("}", "")
+    value = value.replace(_OPEN_BRACE, "{").replace(_CLOSE_BRACE, "}")
     return re.sub(r"\s+", " ", value).strip()
 
 

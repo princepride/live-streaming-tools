@@ -77,7 +77,11 @@ def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
     text = inline_math_to_plain(text)
     text = text.translate(str.maketrans({
         "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3", "₄": "_4",
-        "①": "1)", "②": "2)", "③": "3)", "④": "4)",
+        "₅": "_5", "₆": "_6", "₇": "_7", "₈": "_8", "₉": "_9",
+        # The Latin PDF font has no circled digits, so transliterate the whole
+        # run rather than only the first four (⑤ onward rendered as tofu).
+        "①": "1)", "②": "2)", "③": "3)", "④": "4)", "⑤": "5)",
+        "⑥": "6)", "⑦": "7)", "⑧": "8)", "⑨": "9)", "⑩": "10)",
         "✓": "check", "✗": "no", "～": "~",
     }))
     text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1", text)
