@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16850,
+  "image_count": 9,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。",
+    "qa-report 由 requa 步骤基于修复后的成稿重新审稿生成（流水线原逻辑使用修复前的审稿结果）。",
+    "qa-report 基于修复后的成稿重新独立审稿生成；流水线原逻辑使用的是修复前的审稿结果。",
+    "qa-report 基于修复后的成稿重新独立审稿生成；流水线原逻辑使用的是修复前的审稿结果。",
+    "qa-report 基于修复后的成稿重新独立审稿生成；流水线原逻辑使用的是修复前的审稿结果。",
+    "qa-report 基于修复后的成稿重新独立审稿生成；流水线原逻辑使用的是修复前的审稿结果。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-05.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-17.png",
+    "assets/slides/slide-20.png",
+    "assets/slides/slide-22.png",
+    "assets/slides/slide-34.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\verl_omni_multimodal_rl\\final\\blog.docx",
+    "size": 2938760,
+    "pass": true,
+    "paragraphs": 218,
+    "headings": 33,
+    "numbered_paragraphs": 53,
+    "tables": 9,
+    "embedded_images": 9,
+    "media_parts": 9,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\verl_omni_multimodal_rl\\final\\blog.pdf",
+    "size": 4140148,
+    "pass": true,
+    "pages": 18,
+    "encrypted": false,
+    "embedded_image_xobjects": 9,
+    "expected_images": 9,
+    "pages_without_extractable_text": [],
+    "title": "VeRL-Omni 核心架构解析：多模态强化学习的系统级优化实践",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16850,
+      "translated_chars": 43763,
+      "source_images": 9,
+      "translated_images": 9,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\verl_omni_multimodal_rl\\final\\blog.en.docx",
+      "size": 2938884,
+      "pass": true,
+      "paragraphs": 218,
+      "headings": 33,
+      "numbered_paragraphs": 53,
+      "tables": 9,
+      "embedded_images": 9,
+      "media_parts": 9,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\verl_omni_multimodal_rl\\final\\blog.en.pdf",
+      "size": 3667548,
+      "pass": true,
+      "pages": 21,
+      "encrypted": false,
+      "embedded_image_xobjects": 9,
+      "expected_images": 9,
+      "pages_without_extractable_text": [],
+      "title": "Core Architecture of VeRL-Omni: System-Level Optimization for Multimodal Reinforcement Learning",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

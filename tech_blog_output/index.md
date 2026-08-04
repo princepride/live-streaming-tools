@@ -65,6 +65,28 @@
     [阅读中文](long_sequence_moe_rl/final/blog.md)
     · [English](long_sequence_moe_rl/final/blog.en.md)
 
+-   <span class="article-kicker">RL · ROLLOUT ENGINE</span>
+
+    **当 vLLM 遇见 slime**
+
+    ---
+
+    从训练与推理的权重同步出发，拆解 slime 如何借助 vLLM 构建高吞吐的 RL rollout 链路。
+
+    [阅读中文](vllm_slime_rl_support/final/blog.md)
+    · [English](vllm_slime_rl_support/final/blog.en.md)
+
+-   <span class="article-kicker">MULTIMODAL RL · DIFFUSION</span>
+
+    **VeRL-Omni 多模态强化学习**
+
+    ---
+
+    以异步奖励、步进式连续批处理与 Rollout 校准三项优化为主线，解析扩散模型 RL 的系统级设计与 FlowGRPO 工程映射。
+
+    [阅读中文](verl_omni_multimodal_rl/final/blog.md)
+    · [English](verl_omni_multimodal_rl/final/blog.en.md)
+
 </div>
 
 ## 关于本站

@@ -47,11 +47,15 @@ nav:
       - DSpark 投机解码: dspark_speculative_decoding/final/blog.md
       - vLLM KV Connector: vllm_kv_connector/final/blog.md
       - 长序列 MoE RL: long_sequence_moe_rl/final/blog.md
+      - 当 vLLM 遇见 slime: vllm_slime_rl_support/final/blog.md
+      - veRL-Omni 多模态强化学习: verl_omni_multimodal_rl/final/blog.md
   - English:
       - The technical details behind Kimi K3's Day-0 support: kimi_k3_vllm/final/blog.en.md
       - DSpark Speculative Decoding: dspark_speculative_decoding/final/blog.en.md
       - vLLM KV Connector: vllm_kv_connector/final/blog.en.md
       - Long-Sequence MoE RL: long_sequence_moe_rl/final/blog.en.md
+      - When vLLM Meets slime: vllm_slime_rl_support/final/blog.en.md
+      - Core Architecture of VeRL-Omni: verl_omni_multimodal_rl/final/blog.en.md
 
 plugins:
   - search:
