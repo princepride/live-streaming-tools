@@ -53,6 +53,7 @@ nav:
       - DSpark Speculative Decoding: dspark_speculative_decoding/final/blog.en.md
       - vLLM KV Connector: vllm_kv_connector/final/blog.en.md
       - Long-Sequence MoE RL: long_sequence_moe_rl/final/blog.en.md
+      - When vLLM Meets slime: vllm_meets_slime/final/blog.en.md
 
 plugins:
   - search:

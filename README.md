@@ -46,7 +46,7 @@ mkdocs serve
 
 默认生成过程通过 OpenRouter 调用语音转写、材料分析和写作模型。API 密钥优先从环境变量读取；未设置时，也可从项目根目录下已被 Git 忽略的 `.env` 读取。流水线不会把密钥写入缓存或输出文件。
 
-技术博客流水线也支持 `--provider codex`：复用现成转录，并通过已登录的 Codex CLI 完成幻灯片分析、写作、审稿和翻译。该模式不会向模型后端发送源音频。
+技术博客流水线也支持 `--provider codex`（已登录的 Codex CLI）和 `--provider claude`（已登录的 Claude Code CLI）作为替代后端，两者均复用现成转录，不会向模型后端发送源音频。
 
 ## Codex Skills
 
@@ -213,6 +213,21 @@ python tech_blog_pipeline.py `
 ```
 
 默认仍为 `--provider openrouter`。Codex 模式默认使用 CLI 当前配置的模型；仅在需要固定模型时传入 `--codex-model <model>`。
+
+使用 Claude 后端（先执行 `claude login`）：
+
+```powershell
+python tech_blog_pipeline.py `
+  "D:\video.mp4" `
+  "D:\slides.pptx" `
+  --transcript-json "D:\video_chapters_transcript.json" `
+  --provider claude `
+  -o "D:\live-streaming-tools\tech_blog_output\my_blog" `
+  --workers 3 `
+  --max-sections 8
+```
+
+Claude 后端默认使用 `claude-fable-5`；需要其他模型时通过 `--claude-model <model>` 指定。
 
 博客流水线依次执行：
 
