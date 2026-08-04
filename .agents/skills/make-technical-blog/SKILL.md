@@ -57,8 +57,6 @@ Omit `--transcript-json` only with the OpenRouter backend. Use `--no-english` on
 
 Allow the pipeline to execute slide analysis, evidence extraction, causal outlining, parallel drafting, global editing, independent review, repair, translation, asset packaging, and deterministic QA. Resume the same command after interruption so cache keys remain useful.
 
-When a central tensor formula, attention path, sharding layout, or collective operation remains unclear in the source slides, use `$tensor-formula-viz` to create one supplementary shape-aware figure. Add it only when it improves the explanation, store its publishable files under `final/assets/diagrams/`, and reference the PNG or SVG with a relative Markdown path. Keep the editable/vector source beside it and do not invent shapes that are not supported by the evidence ledger.
-
 ## Verify the deliverables
 
 Run:
@@ -76,6 +74,28 @@ Require the final directory to contain Chinese Markdown, DOCX, and PDF; English 
 
 ## Update the project index
 
-When the blog corresponds to a README index entry, place the project folder name in the “博客” column and link it directly to `./tech_blog_output/<topic_slug>/final/blog.md`. Leave entries without a blog blank.
+When the blog corresponds to a README index entry, place the project folder name in the “博客” column and link it to the published page, not to the Markdown file:
 
-Report direct paths to both Markdown editions and each DOCX/PDF deliverable, plus deterministic and visual QA results.
+```
+https://princepride.github.io/live-streaming-tools/<topic_slug>/final/blog/
+```
+
+Leave entries without a blog blank.
+
+## Publish to GitHub Pages
+
+Every new blog must also be wired into the MkDocs site, or it stays unreachable from the published site even though its files are committed. Complete all three edits:
+
+1. `mkdocs.yml` — add the blog under both `nav` groups: the Chinese title pointing at `<topic_slug>/final/blog.md`, and the English title pointing at `<topic_slug>/final/blog.en.md`. Skip the English entry only when the run used `--no-english`.
+2. `tech_blog_output/index.md` — append a card to the `最新文章` grid following the existing pattern: an `article-kicker` span naming the topic area, the bold title, a one-sentence summary, and the `[阅读中文](<topic_slug>/final/blog.md)` · `[English](<topic_slug>/final/blog.en.md)` link pair. Paths here are relative to `docs_dir`, so they carry no `tech_blog_output/` prefix.
+3. Confirm the site builds with no broken references:
+
+```powershell
+python -m mkdocs build --strict
+```
+
+MkDocs serves directory URLs, so `<topic_slug>/final/blog.md` publishes at `<topic_slug>/final/blog/` — the form the README must link to.
+
+Before finishing, check that every directory under `tech_blog_output/` holding a `final/blog.md` appears in both the `nav` and the homepage grid, and add any that earlier runs missed. `.github/workflows/pages.yml` rebuilds and deploys on push to `main` whenever `mkdocs.yml` or `tech_blog_output/**` changes; the site does not update until those changes are pushed.
+
+Report direct paths to both Markdown editions and each DOCX/PDF deliverable, the published page URL, plus deterministic and visual QA results.

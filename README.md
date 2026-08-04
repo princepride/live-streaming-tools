@@ -16,12 +16,12 @@
 | 5 | Rust 前端重构 | [BV19fJJ6AE6W](https://www.bilibili.com/video/BV19fJJ6AE6W) | [vLLM Rust Frontend Introduction](https://drive.google.com/file/d/14cm6XyvY4dQjuBeY2pCn28macviA4PWx/view) | |
 | 6 | 昇腾部署 GLM-5 指南 | [BV1eoJJ6eEUv](https://www.bilibili.com/video/BV1eoJJ6eEUv) | [GLM-5 优化](https://drive.google.com/file/d/1-j3saiDcRuFyPjsDexGDAWN58fU-JvsO/view) | |
 | 7 | AutoRound 加速 LLM/VLM 低比特量化部署 | [BV1etjE69Efx](https://www.bilibili.com/video/BV1etjE69Efx) | [配套资料目录](https://drive.google.com/drive/folders/1d0kx6WTJ-KHDMVjCsGvT64H4urwDL7_h) | |
-| 8 | veRL-Omni：多模态大模型强化学习 | [BV1qd7n6TEZk](https://www.bilibili.com/video/BV1qd7n6TEZk) | [veRL-Omni Slides](https://drive.google.com/file/d/1T534U3IEK5RzebGZ6sdhLQQ2tXH-pSho/view) | [verl_omni_multimodal_rl](./tech_blog_output/verl_omni_multimodal_rl/final/blog.md) |
-| 9 | 当 vLLM 遇见 slime | [BV1LGMP6FEQa](https://www.bilibili.com/video/BV1LGMP6FEQa) | [RL Support in vLLM](https://drive.google.com/file/d/1tWhFjUy31CNHqaXp4_zvwt2pKJlvu09L/view) | [vllm_slime_rl_support](./tech_blog_output/vllm_slime_rl_support/final/blog.md) |
-| 10 | KV Connector 的前世今生 | [BV1gRNF6PEc3](https://www.bilibili.com/video/BV1gRNF6PEc3) | [vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view) | [vllm_kv_connector](./tech_blog_output/vllm_kv_connector/final/blog.md) |
-| 11 | 让长序列 MoE RL 训练更好调 | [BV1WLKw6aEDq](https://www.bilibili.com/video/BV1WLKw6aEDq) | [配套讲义](https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view) | [long_sequence_moe_rl](./tech_blog_output/long_sequence_moe_rl/final/blog.md) |
-| 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [dspark_speculative_decoding](./tech_blog_output/dspark_speculative_decoding/final/blog.md) |
-| 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](./tech_blog_output/kimi_k3_vllm/final/blog.md) |
+| 8 | veRL-Omni：多模态大模型强化学习 | [BV1qd7n6TEZk](https://www.bilibili.com/video/BV1qd7n6TEZk) | [veRL-Omni Slides](https://drive.google.com/file/d/1T534U3IEK5RzebGZ6sdhLQQ2tXH-pSho/view) | [verl_omni_multimodal_rl](https://princepride.github.io/live-streaming-tools/verl_omni_multimodal_rl/final/blog/) |
+| 9 | 当 vLLM 遇见 slime | [BV1LGMP6FEQa](https://www.bilibili.com/video/BV1LGMP6FEQa) | [RL Support in vLLM](https://drive.google.com/file/d/1tWhFjUy31CNHqaXp4_zvwt2pKJlvu09L/view) | [vllm_slime_rl_support](https://princepride.github.io/live-streaming-tools/vllm_slime_rl_support/final/blog/) |
+| 10 | KV Connector 的前世今生 | [BV1gRNF6PEc3](https://www.bilibili.com/video/BV1gRNF6PEc3) | [vLLM KV Connector Mini Lesson](https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view) | [vllm_kv_connector](https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/blog/) |
+| 11 | 让长序列 MoE RL 训练更好调 | [BV1WLKw6aEDq](https://www.bilibili.com/video/BV1WLKw6aEDq) | [配套讲义](https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view) | [long_sequence_moe_rl](https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/blog/) |
+| 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [dspark_speculative_decoding](https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/blog/) |
+| 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](https://princepride.github.io/live-streaming-tools/kimi_k3_vllm/final/blog/) |
 
 ## 在线技术博客
 
@@ -50,12 +50,11 @@ mkdocs serve
 
 ## Codex Skills
 
-项目在 `.agents/skills/` 中提供四个可复用 Skill。使用 Codex 打开本仓库后，可在请求中直接点名：
+项目在 `.agents/skills/` 中提供三个可复用 Skill。使用 Codex 打开本仓库后，可在请求中直接点名：
 
 - `$make-video-chapters`：为单个视频/音频生成 B 站章节，或用 BBDown 下载并处理整个合集；默认校验最多 10 章、标题最多 16 个字符。
-- `$make-technical-blog`：将技术视频和 PDF/PPTX 等课件整理为带图片的中英文 Markdown、DOCX 与 PDF，并更新 README 博客索引。
+- `$make-technical-blog`：将技术视频和 PDF/PPTX 等课件整理为带图片的中英文 Markdown、DOCX 与 PDF，并同步更新 README 博客索引与 GitHub Pages 站点（`mkdocs.yml` 导航和首页卡片）。
 - `$validate-stream-artifacts`：确定性检查章节时间线，以及博客 Markdown 图片、DOCX 完整性、PDF 页面和中英文资源一致性，并指导逐页视觉复核。
-- `$tensor-formula-viz`：把张量公式或代码路径整理为形状严格对齐的矩阵、分片、注意力或并行计算示意图；移植自 [wdkns/wdkns-skills](https://github.com/wdkns/wdkns-skills/tree/main/skills/tensor-formula-viz)，遵循 GPL-3.0。
 
 示例请求：
 
@@ -63,7 +62,6 @@ mkdocs serve
 使用 $make-video-chapters 给这个视频生成 B 站章节并校验。
 使用 $make-technical-blog 根据这个视频和 PPT 生成中英文技术博客。
 使用 $validate-stream-artifacts 检查 tech_blog_output/topic_slug 的全部成品。
-使用 $tensor-formula-viz 把这段矩阵乘法代码画成带形状标注的示意图。
 ```
 
 验证脚本也可以独立执行：
