@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16797,
+  "image_count": 11,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-02.png",
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-17.png",
+    "assets/slides/slide-23.png",
+    "assets/slides/slide-24.png",
+    "assets/slides/slide-25.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_slime_rl_support\\final\\blog.docx",
+    "size": 3310538,
+    "pass": true,
+    "paragraphs": 279,
+    "headings": 43,
+    "numbered_paragraphs": 65,
+    "tables": 8,
+    "embedded_images": 11,
+    "media_parts": 11,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_slime_rl_support\\final\\blog.pdf",
+    "size": 4823182,
+    "pass": true,
+    "pages": 20,
+    "encrypted": false,
+    "embedded_image_xobjects": 11,
+    "expected_images": 11,
+    "pages_without_extractable_text": [],
+    "title": "极简架构与高吞吐的碰撞：vime 强化学习框架与白盒智能体生态",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16797,
+      "translated_chars": 44450,
+      "source_images": 11,
+      "translated_images": 11,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_slime_rl_support\\final\\blog.en.docx",
+      "size": 3310278,
+      "pass": true,
+      "paragraphs": 279,
+      "headings": 43,
+      "numbered_paragraphs": 65,
+      "tables": 8,
+      "embedded_images": 11,
+      "media_parts": 11,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_slime_rl_support\\final\\blog.en.pdf",
+      "size": 4300585,
+      "pass": true,
+      "pages": 24,
+      "encrypted": false,
+      "embedded_image_xobjects": 11,
+      "expected_images": 11,
+      "pages_without_extractable_text": [],
+      "title": "The Collision of Minimalist Architecture and High Throughput: The vime Reinforcement Learning Framework and the White-Box Agent Ecosystem",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}
