@@ -34,6 +34,65 @@ from reportlab.platypus import (
 
 from blog_docx import INLINE_PATTERN, _extract_title, _parse_table, inline_math_to_plain, latex_to_plain
 
+ZERO_WIDTH_SPACE = "​"
+
+# jieba is optional — it greatly improves CJK line-breaking in PDFs but isn't
+# required for English output. Load and warm it once at import time.
+_jieba_cut = None
+try:
+    import jieba
+    _jieba_cut = jieba.lcut
+    # Force dictionary load eagerly so first render isn't slow.
+    _ = _jieba_cut("预热")
+except ImportError:
+    pass
+
+
+def _cjk_line_break(text: str) -> str:
+    """Insert zero-width spaces between Chinese words so ReportLab can break naturally.
+
+    ReportLab breaks lines on characters (including spaces) but has no notion of CJK
+    word boundaries.  Without word segmentation every character is an equally valid
+    break point, so lines routinely split words in the middle.  Inserting U+200B at
+    segmentation boundaries gives the layout engine preferred break positions while
+    keeping the rendered text visually identical.
+    """
+    if _jieba_cut is None:
+        return text  # jieba not available — fall back to ReportLab's per-character breaks
+    # Segment the full text as a single string so jieba can use contextual cues
+    # (short adjacent tokens, English fragments, numbers) to produce better cuts.
+    tokens = _jieba_cut(text)
+    return ZERO_WIDTH_SPACE.join(tokens)
+
+
+def _cjk_break_html(html: str) -> str:
+    """Apply CJK word segmentation to text portions of an HTML string.
+
+    Only the content outside ``<tag>`` (including inside ``</tag>``) is segmented;
+    attribute values inside opening tags are left alone because they have no impact
+    on ReportLab line-breaking.  Text inside ``<font name="{MONO_FONT}">`` (inline
+    code) is also skipped — segmenting identifiers like ``generate_sequences()``
+    would insert zero-width spaces mid-identifier and break the code rendering.
+    """
+    if _jieba_cut is None:
+        return html
+    # Split into tagged blocks; skip mono-font segments entirely.
+    escape = rf'<font\s+name="{MONO_FONT}"[^>]*>.*?</font>'
+    placeholders: dict[str, str] = {}
+
+    def _save(m: re.Match) -> str:
+        key = f"{len(placeholders)}"
+        placeholders[key] = m.group(0)
+        return key
+
+    html = re.sub(escape, _save, html, flags=re.S)
+    # Segment the remaining text (outside tags and outside mono blocks).
+    html = re.sub(r">([^<]+)<", lambda m: ">" + _cjk_line_break(m.group(1)) + "<", html)
+    # Restore mono-font blocks verbatim.
+    for key, value in placeholders.items():
+        html = html.replace(key, value, 1)
+    return html
+
 
 INK = colors.HexColor("#203748")
 BLUE = colors.HexColor("#2E74B5")
@@ -46,12 +105,19 @@ LINK = colors.HexColor("#0563C1")
 
 def _font_path(*names: str) -> Path:
     roots = [Path("C:/Windows/Fonts"), Path("/usr/share/fonts"), Path("/Library/Fonts")]
+    # Many Linux distros nest fonts in subdirectories (truetype/, opentype/, etc.).
     for root in roots:
+        if not root.is_dir():
+            continue
         for name in names:
-            candidate = root / name
-            if candidate.is_file():
-                return candidate
+            candidates = list(root.rglob(name)) if root.is_dir() else []
+            for candidate in candidates:
+                if candidate.is_file():
+                    return candidate
     raise RuntimeError(f"找不到可用于中文 PDF 的字体：{', '.join(names)}")
+
+
+MONO_FONT = "BlogMono"
 
 
 def register_fonts(language: str = "zh") -> tuple[str, str]:
@@ -70,6 +136,11 @@ def register_fonts(language: str = "zh") -> tuple[str, str]:
         pdfmetrics.registerFont(TTFont(bold_name, str(bold), subfontIndex=0))
         pdfmetrics.registerFontFamily(regular_name, normal=regular_name, bold=bold_name,
                                       italic=regular_name, boldItalic=bold_name)
+    # Register a monospace font for inline code — ReportLab has no built-in Courier.
+    if MONO_FONT not in pdfmetrics.getRegisteredFontNames():
+        mono_path = _font_path("DejaVuSansMono.ttf", "LiberationMono-Regular.ttf",
+                               "DejaVuSansMono.ttc", "LiberationMono-Regular.ttc")
+        pdfmetrics.registerFont(TTFont(MONO_FONT, str(mono_path), subfontIndex=0))
     return regular_name, bold_name
 
 
@@ -90,7 +161,7 @@ def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
         if token.startswith("**"):
             parts.append(f'<font name="{bold_font}">{html.escape(token[2:-2])}</font>')
         elif token.startswith("`"):
-            parts.append(f'<font name="Courier" color="#1F4D78" backColor="#EEF2F6">'
+            parts.append(f'<font name="{MONO_FONT}" color="#1F4D78" backColor="#EEF2F6">'
                          f'{html.escape(token[1:-1])}</font>')
         elif token.startswith("*"):
             parts.append(f'<i>{html.escape(token[1:-1])}</i>')
@@ -104,12 +175,15 @@ def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
     return "".join(parts)
 
 
-def _styles(regular: str, bold: str) -> dict[str, ParagraphStyle]:
+def _styles(regular: str, bold: str, language: str = "zh") -> dict[str, ParagraphStyle]:
     base = getSampleStyleSheet()
+    # Chinese text has no inter-word spaces, so JUSTIFY stretches the handful of spaces
+    # that exist (around English terms, commas, colons) into ugly rivers. Use LEFT for CJK.
+    body_align = TA_LEFT if language == "zh" else TA_JUSTIFY
     return {
         "body": ParagraphStyle(
             "BlogBody", parent=base["BodyText"], fontName=regular, fontSize=10.2,
-            leading=15, alignment=TA_JUSTIFY, textColor=colors.HexColor("#202124"),
+            leading=15, alignment=body_align, textColor=colors.HexColor("#202124"),
             spaceBefore=0, spaceAfter=7.5, allowWidows=0, allowOrphans=0,
         ),
         "lead": ParagraphStyle(
@@ -229,14 +303,19 @@ def _table_widths(rows: list[list[str]]) -> list[float]:
 
 
 def _make_table(rows: list[list[str]], styles: dict[str, ParagraphStyle], regular: str,
-                bold: str) -> Table:
+                bold: str, language: str = "zh") -> Table:
     columns = max(len(row) for row in rows)
     data = []
     for row_index, row in enumerate(rows):
         style = styles["table_header"] if row_index == 0 else styles["table"]
         data.append([
-            Paragraph(_inline_markup(row[index] if index < len(row) else "",
-                                     regular_font=regular, bold_font=bold), style)
+            Paragraph(
+                _cjk_break_html(
+                    _inline_markup(row[index] if index < len(row) else "",
+                                   regular_font=regular, bold_font=bold))
+                if language == "zh" else _inline_markup(row[index] if index < len(row) else "",
+                                                         regular_font=regular, bold_font=bold),
+                style)
             for index in range(columns)
         ])
     table = Table(data, colWidths=_table_widths(rows), repeatRows=1, hAlign="LEFT")
@@ -255,7 +334,8 @@ def _make_table(rows: list[list[str]], styles: dict[str, ParagraphStyle], regula
 
 
 def _collect_list(lines: list[str], start: int, ordered: bool,
-                  style: ParagraphStyle, regular: str, bold: str) -> tuple[ListFlowable, int]:
+                  style: ParagraphStyle, regular: str, bold: str,
+                  language: str = "zh") -> tuple[ListFlowable, int]:
     pattern = re.compile(r"^\d+[.)]\s+(.+)$" if ordered else r"^[-+*]\s+(.+)$")
     items = []
     index = start
@@ -288,9 +368,10 @@ def _collect_list(lines: list[str], start: int, ordered: bool,
             item_lines.append(stripped)
             index += 1
 
-        paragraph = Paragraph(
-            _inline_markup(" ".join(item_lines), regular_font=regular, bold_font=bold),
-            style,
+        markup = _inline_markup(" ".join(item_lines), regular_font=regular, bold_font=bold)
+        if language == "zh":
+            markup = _cjk_break_html(markup)
+        paragraph = Paragraph(markup, style,
         )
         item_value = len(items) + 1 if ordered else None
         items.append(ListItem(paragraph, leftIndent=13, value=item_value))
@@ -325,9 +406,17 @@ def _first_page(canvas, document) -> None:
 def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str | None = None,
                     language: str = "zh") -> Path:
     regular, bold = register_fonts(language)
-    styles = _styles(regular, bold)
+    styles = _styles(regular, bold, language)
     markdown_path = markdown_path.resolve()
     output_path = output_path.resolve()
+
+    def _styled(text: str) -> str:
+        """Render inline markup and, for Chinese, insert CJK word breaks."""
+        html = _inline_markup(text, regular_font=regular, bold_font=bold)
+        if language == "zh":
+            html = _cjk_break_html(html)
+        return html
+
     lines = markdown_path.read_text(encoding="utf-8").splitlines()
     title, subtitle, lines = _extract_title(lines)
 
@@ -413,47 +502,43 @@ def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str
                                           styles["caption"]))
             if index + 1 < len(lines) and lines[index + 1].strip().startswith("*图"):
                 caption = lines[index + 1].strip().strip("*")
-                elements.append(Paragraph(_inline_markup(caption, regular_font=regular,
-                                                         bold_font=bold), styles["caption"]))
+                elements.append(Paragraph(_styled(caption), styles["caption"]))
                 index += 1
             story.append(KeepTogether(elements))
             index += 1
             continue
         if stripped.startswith("|"):
             rows, index = _parse_table(lines, index)
-            story.extend([_make_table(rows, styles, regular, bold), Spacer(1, 9)])
+            story.extend([_make_table(rows, styles, regular, bold, language), Spacer(1, 9)])
             continue
         heading = re.match(r"^(#{2,4})\s+(.+)$", stripped)
         if heading:
             level = min(3, len(heading.group(1)) - 1)
             if level == 1:
                 current_section = heading.group(2)
-            story.append(Paragraph(_inline_markup(heading.group(2), regular_font=regular,
-                                                  bold_font=bold), styles[f"h{level}"]))
+            story.append(Paragraph(_styled(heading.group(2)), styles[f"h{level}"]))
             index += 1
             continue
         if stripped.startswith(">"):
-            story.append(Paragraph(_inline_markup(stripped.lstrip("> "), regular_font=regular,
-                                                  bold_font=bold), styles["quote"]))
+            story.append(Paragraph(_styled(stripped.lstrip("> ")), styles["quote"]))
             index += 1
             continue
         if re.match(r"^[-+*]\s+", stripped):
             list_style = styles["compact_list"] if "结论与局限" in current_section else styles["list"]
-            flow, index = _collect_list(lines, index, False, list_style, regular, bold)
+            flow, index = _collect_list(lines, index, False, list_style, regular, bold, language)
             story.append(flow)
             continue
         if re.match(r"^\d+[.)]\s+", stripped):
             list_style = styles["compact_list"] if "结论与局限" in current_section else styles["list"]
-            flow, index = _collect_list(lines, index, True, list_style, regular, bold)
+            flow, index = _collect_list(lines, index, True, list_style, regular, bold, language)
             story.append(flow)
             continue
         if stripped.startswith("*图"):
-            story.append(Paragraph(_inline_markup(stripped.strip("*"), regular_font=regular,
-                                                  bold_font=bold), styles["caption"]))
+            story.append(Paragraph(_styled(stripped.strip("*")), styles["caption"]))
             index += 1
             continue
         style = styles["lead"] if body_count == 0 else styles["body"]
-        story.append(Paragraph(_inline_markup(stripped, regular_font=regular, bold_font=bold), style))
+        story.append(Paragraph(_styled(stripped), style))
         body_count += 1
         index += 1
 

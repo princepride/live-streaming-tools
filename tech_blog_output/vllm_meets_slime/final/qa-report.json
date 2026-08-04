@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "pass": false,
+  "article_chars": 21155,
+  "image_count": 10,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": false,
+  "severe_review_issues": [
+    {
+      "severity": "P1",
+      "category": "事实无台账支持/疑似虚构",
+      "location": "第一节『旧形态的起点』Table 5 表格",
+      "problem": "台账 F05 仅给出 7B 行的 Generation 262.96s、Weights Sync 4.32s、Total 471.11s，70B 整行，以及 34B 的 Get Logits+Reward 326.00s 与 13B 的 29.58s；文章表格中 7B 的 Get Logits 32.7s 与 Training 171.13s、13B 行的 372.14s/10.03s/197.18s/608.93s、34B 行的 720.50s/35.47s/444.43s/1526.40s 均无台账支持，属于超出证据的具体数值补造。",
+      "evidence": "台账 F05 原文对 13B/34B 仅表述为『数据类似地显示生成占比随规模上升、权重同步耗时随规模增长』，未给出上述单元格数值；文章却填满了四行五列全部数字。",
+      "suggested_fix": "要么与 OpenRLHF 论文原表逐格核实后再保留完整表格并注明直接引自论文，要么将表格收缩为台账支持的数值（7B 三项、70B 整行、34B/13B 的 Get Logits 两值），其余单元格留空或以『—（详见原论文）』标注。"
+    },
+    {
+      "severity": "P1",
+      "category": "逻辑错误/与自身数据矛盾",
+      "location": "第一节，Table 5 之后『两条曲线随规模同时上扬』段",
+      "problem": "文章称 Generation『绝对值增长近 9 倍，超过 Training 的增幅』，但按文章自己给出的表格，Training 从 171.13s 增至 1800.71s 约 10.5 倍，高于 Generation 的约 8.6 倍，断言与数据直接矛盾；同段『生成占比』被描述为随规模上扬的曲线，但文中数据为 7B 约 56%、70B『仍约占一半』，占比实际未上升且非单调。",
+      "evidence": "262.96→2252.79 约 8.6 倍；171.13→1800.71 约 10.5 倍；56% → 约 50% 为下降。",
+      "suggested_fix": "删去『超过 Training 的增幅』的比较；将『生成占比上扬』改为『生成在各规模下均占总耗时约一半或以上、绝对耗时随规模近 9 倍增长』，只保留台账可支撑的表述（70B 约占一半、权重同步 4.32s→111.65s 涨约 25 倍）。"
+    }
+  ],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-02.png",
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-17.png",
+    "assets/slides/slide-24.png",
+    "assets/slides/slide-25.png"
+  ]
+}

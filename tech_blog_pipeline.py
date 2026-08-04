@@ -380,6 +380,152 @@ class CodexClient:
         )
 
 
+class ClaudeClient:
+    """Use the authenticated Claude Code CLI as a non-interactive generation backend."""
+
+    SYSTEM_PROMPT = (
+        "你是技术博客流水线中的纯生成组件。除了读取提示中明确给出的图片文件，"
+        "不要使用任何工具、不要浏览网络、不要修改文件、不要查看仓库中的其他内容。"
+        "只根据消息内容完成任务，并把所要求的正文或 JSON 作为最终回答；"
+        "回答中不要加入任何寒暄、说明或元评论。"
+    )
+
+    def __init__(self, cache_dir: Path, workspace: Path, model: str | None = None) -> None:
+        executable = shutil.which("claude")
+        if not executable:
+            raise RuntimeError("找不到 Claude Code CLI；请先安装并登录 claude")
+        self.executable = executable
+        self.cache_dir = cache_dir
+        self.workspace = workspace
+        self.model = model or "claude-fable-5"
+
+    @staticmethod
+    def _prompt_and_images(messages: list[dict[str, Any]], temp_dir: Path) -> tuple[str, list[Path]]:
+        prompt_parts: list[str] = []
+        images: list[Path] = []
+        for message_index, message in enumerate(messages):
+            role = str(message.get("role", "user")).upper()
+            prompt_parts.append(f"\n<{role}>")
+            content = message.get("content", "")
+            if isinstance(content, str):
+                prompt_parts.append(content)
+                continue
+            for item_index, item in enumerate(content):
+                if item.get("type") == "text":
+                    prompt_parts.append(str(item.get("text", "")))
+                    continue
+                if item.get("type") != "image_url":
+                    continue
+                url = str(item.get("image_url", {}).get("url", ""))
+                match = re.fullmatch(r"data:image/([a-zA-Z0-9.+-]+);base64,(.+)", url, re.S)
+                if not match:
+                    raise RuntimeError("Claude 后端只接受流水线生成的内嵌图片")
+                extension = "jpg" if match.group(1).lower() in {"jpeg", "jpg"} else "png"
+                image_path = temp_dir / f"message-{message_index:02d}-{item_index:02d}.{extension}"
+                image_path.write_bytes(base64.b64decode(match.group(2), validate=True))
+                images.append(image_path)
+                prompt_parts.append(
+                    f"[附图 {len(images)}] 请先用 Read 工具读取图片文件 {image_path}，再结合其内容分析。"
+                )
+        if images:
+            prompt_parts.append(
+                "\n开始作答前，请先用 Read 工具逐一读取上面列出的全部图片文件。"
+            )
+        return "\n".join(prompt_parts), images
+
+    def _run_cli(self, prompt: str, temp_dir: Path, reasoning: str,
+                 allow_read: bool) -> str:
+        command = [
+            self.executable, "-p", "-",
+            "--model", self.model,
+            "--output-format", "json",
+            "--append-system-prompt", self.SYSTEM_PROMPT,
+        ]
+        if allow_read:
+            command.extend(["--allowedTools", "Read", "--add-dir", str(temp_dir),
+                            "--max-turns", "30"])
+        else:
+            command.extend(["--allowedTools", "", "--max-turns", "1"])
+        child_env = os.environ.copy()
+        child_env.pop("OPENROUTER_API_KEY", None)
+        for name in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID",
+                     "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_BRIDGE_SESSION_ID",
+                     "CLAUDE_PID", "CLAUDE_EFFORT"):
+            child_env.pop(name, None)
+        child_env["CLAUDE_EFFORT"] = reasoning if reasoning in {"low", "medium", "high"} else "high"
+        process = subprocess.run(
+            command, input=prompt, capture_output=True, text=True, encoding="utf-8",
+            cwd=self.workspace, timeout=3600, env=child_env,
+        )
+        if process.returncode:
+            detail = process.stderr.strip() or process.stdout.strip()
+            raise RuntimeError(f"Claude CLI 调用失败：{detail[-1600:]}")
+        try:
+            envelope = json.loads(process.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Claude CLI 输出不是 JSON：{process.stdout[-800:]}") from exc
+        if envelope.get("is_error"):
+            raise RuntimeError(f"Claude CLI 返回错误：{str(envelope.get('result'))[-1600:]}")
+        content = envelope.get("result")
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Claude CLI 没有返回最终响应")
+        return content
+
+    def chat(self, *, stage: str, model: str, messages: list[dict[str, Any]],
+             max_tokens: int, reasoning: str = "high", temperature: float = 0.15,
+             schema: dict[str, Any] | None = None) -> Any:
+        effective_model = self.model
+        key_data = {
+            "pipeline": PIPELINE_VERSION, "provider": "claude", "stage": stage,
+            "model": effective_model, "messages": messages, "max_tokens": max_tokens,
+            "reasoning": reasoning, "temperature": temperature, "schema": schema,
+        }
+        key = stable_hash(key_data)
+        cache = self.cache_dir / "llm-claude" / stage / f"{key}.json"
+        if cache.exists():
+            stored = json.loads(cache.read_text(encoding="utf-8"))
+            log(f"  使用 Claude 缓存：{stage}")
+            return stored["parsed"]
+
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        parsed: Any = None
+        last_error = "unknown error"
+        with tempfile.TemporaryDirectory(prefix=f"claude-{stage}-", dir=cache.parent) as temp:
+            temp_dir = Path(temp)
+            prompt, images = self._prompt_and_images(messages, temp_dir)
+            if schema:
+                prompt += (
+                    "\n\n<OUTPUT_CONTRACT>\n"
+                    "只输出一个严格符合下面 JSON Schema 的 JSON 对象。"
+                    "不要输出代码块标记、解释或任何额外文字。\n"
+                    f"{json.dumps(schema, ensure_ascii=False)}\n"
+                    "</OUTPUT_CONTRACT>"
+                )
+            for attempt in range(3):
+                try:
+                    content = self._run_cli(prompt, temp_dir, reasoning, bool(images))
+                    parsed = parse_json_text(content) if schema else strip_fence(content)
+                    break
+                except (RuntimeError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+                    last_error = str(exc)
+                    log(f"  Claude 阶段 {stage} 第 {attempt + 1} 次失败：{last_error[-300:]}")
+                    if attempt == 2:
+                        raise RuntimeError(f"Claude 阶段 {stage} 失败：{last_error[-1600:]}") from exc
+                    time.sleep(5 * (attempt + 1))
+
+        atomic_json(cache, {
+            "schema_version": SCHEMA_VERSION, "key": key, "provider": "claude",
+            "model": effective_model, "parsed": parsed,
+        })
+        return parsed
+
+    def transcribe(self, media: Path, *, model: str, workers: int, chunk_seconds: int,
+                   overlap_seconds: int) -> list[dict[str, Any]]:
+        raise RuntimeError(
+            "Claude 后端不直接转写音频；请提供 --transcript-json，或先运行章节流水线生成转录"
+        )
+
+
 def _pptx_slide_texts(pptx: Path) -> list[str]:
     """Extract visible slide text in presentation order without requiring Office."""
     p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -1110,10 +1256,12 @@ def main() -> int:
                         help="一个或多个对应的 PPTX/PPTM/PDF 幻灯片，按给定顺序合并分析")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("tech_blog_output"))
     parser.add_argument("--transcript-json", type=Path, help="复用现有带时间戳转写 JSON")
-    parser.add_argument("--provider", choices=["openrouter", "codex"], default="openrouter",
-                        help="模型后端：OpenRouter API，或已登录的 Codex CLI")
+    parser.add_argument("--provider", choices=["openrouter", "codex", "claude"], default="openrouter",
+                        help="模型后端：OpenRouter API、已登录的 Codex CLI，或已登录的 Claude Code CLI")
     parser.add_argument("--codex-model",
                         help="Codex 后端模型；省略时使用 Codex CLI 当前配置的默认模型")
+    parser.add_argument("--claude-model", default="claude-fable-5",
+                        help="Claude 后端模型；默认 claude-fable-5")
     parser.add_argument("--style-profile", type=Path,
                         default=Path("references/mengyuan_async_llm/STYLE_PROFILE.md"))
     parser.add_argument("--reference-html", type=Path,
@@ -1159,13 +1307,16 @@ def main() -> int:
         "provider": args.provider,
         "models": {"analyst": args.analyst_model, "writer": args.writer_model,
                    "critic": args.critic_model, "translation": args.translation_model,
-                   "stt": args.stt_model, "codex": args.codex_model or "configured-default"},
+                   "stt": args.stt_model, "codex": args.codex_model or "configured-default",
+                   "claude": args.claude_model},
         "reference": str(args.reference_html.resolve()) if args.reference_html.exists() else None,
     }
     atomic_json(root / "run.json", manifest)
     client: ModelClient
     if args.provider == "openrouter":
         client = OpenRouter(str(api_key), root / "cache")
+    elif args.provider == "claude":
+        client = ClaudeClient(root / "cache", Path(__file__).resolve().parent, args.claude_model)
     else:
         client = CodexClient(root / "cache", Path(__file__).resolve().parent, args.codex_model)
 
@@ -1180,9 +1331,9 @@ def main() -> int:
         log(f"[2/7] 复用现有转写：{transcript_path}")
         transcript = load_transcript(transcript_path)
     else:
-        if args.provider == "codex":
+        if args.provider in {"codex", "claude"}:
             raise RuntimeError(
-                "Codex 后端需要现成转录；请用 --transcript-json 指定 *_chapters_transcript.json"
+                f"{args.provider} 后端需要现成转录；请用 --transcript-json 指定 *_chapters_transcript.json"
             )
         log("[2/7] 没有发现现成转写，开始带重叠并行转写")
         transcript = client.transcribe(args.media, model=args.stt_model, workers=args.workers,
