@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16333,
+  "image_count": 3,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。",
+    "已删除审校指出的两处无台账支持细节：EP 数量公式与 MTP=3 数值。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-14.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\ascend_glm5_deployment\\final\\blog.docx",
+    "size": 653469,
+    "pass": true,
+    "paragraphs": 206,
+    "headings": 35,
+    "numbered_paragraphs": 46,
+    "tables": 13,
+    "embedded_images": 3,
+    "media_parts": 3,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\ascend_glm5_deployment\\final\\blog.pdf",
+    "size": 1336022,
+    "pass": true,
+    "pages": 15,
+    "encrypted": false,
+    "embedded_image_xobjects": 3,
+    "expected_images": 3,
+    "pages_without_extractable_text": [],
+    "title": "GLM-5 昇腾推理优化：从架构瓶颈到端到端性能的系统性拆解",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16333,
+      "translated_chars": 42180,
+      "source_images": 3,
+      "translated_images": 3,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\ascend_glm5_deployment\\final\\blog.en.docx",
+      "size": 653932,
+      "pass": true,
+      "paragraphs": 206,
+      "headings": 35,
+      "numbered_paragraphs": 46,
+      "tables": 13,
+      "embedded_images": 3,
+      "media_parts": 3,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\ascend_glm5_deployment\\final\\blog.en.pdf",
+      "size": 910272,
+      "pass": true,
+      "pages": 19,
+      "encrypted": false,
+      "embedded_image_xobjects": 3,
+      "expected_images": 3,
+      "pages_without_extractable_text": [],
+      "title": "GLM-5 Ascend Inference Optimization: A Systematic Dissection from Architectural Bottlenecks to End-to-End Performance",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

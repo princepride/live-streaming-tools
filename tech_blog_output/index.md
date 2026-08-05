@@ -98,6 +98,17 @@
     [阅读中文](auto_round_vllm_vlm_low_bit/final/blog.md)
     · [English](auto_round_vllm_vlm_low_bit/final/blog.en.md)
 
+-   <span class="article-kicker">ASCEND · INFERENCE OPTIMIZATION</span>
+
+    **GLM-5 昇腾推理优化**
+
+    ---
+
+    从 TTFT、TPOT 与显存约束出发，拆解 GLM-5 的并行策略、PD 分离、KV Cache 压缩、图模式与融合算子优化。
+
+    [阅读中文](ascend_glm5_deployment/final/blog.md)
+    · [English](ascend_glm5_deployment/final/blog.en.md)
+
 </div>
 
 ## 关于本站
