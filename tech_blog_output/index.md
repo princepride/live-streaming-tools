@@ -87,6 +87,17 @@
     [阅读中文](verl_omni_multimodal_rl/final/blog.md)
     · [English](verl_omni_multimodal_rl/final/blog.en.md)
 
+-   <span class="article-kicker">QUANTIZATION · INFERENCE</span>
+
+    **vLLM 低比特量化实践：AutoRound**
+
+    ---
+
+    从截断与舍入的误差博弈出发，拆解 SignSGD 块级联合优化、QDQ 伪量化、vLLM 集成与 CFG 并行加速。
+
+    [阅读中文](auto_round_vllm_vlm_low_bit/final/blog.md)
+    · [English](auto_round_vllm_vlm_low_bit/final/blog.en.md)
+
 </div>
 
 ## 关于本站

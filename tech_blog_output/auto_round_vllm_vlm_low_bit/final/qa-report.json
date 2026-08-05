@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16991,
+  "image_count": 9,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-07.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-20.png",
+    "assets/slides/slide-24.png",
+    "assets/slides/slide-25.png",
+    "assets/slides/slide-28.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\auto_round_vllm_vlm_low_bit\\final\\blog.docx",
+    "size": 2510376,
+    "pass": true,
+    "paragraphs": 221,
+    "headings": 42,
+    "numbered_paragraphs": 49,
+    "tables": 10,
+    "embedded_images": 9,
+    "media_parts": 9,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\auto_round_vllm_vlm_low_bit\\final\\blog.pdf",
+    "size": 3457469,
+    "pass": true,
+    "pages": 17,
+    "encrypted": false,
+    "embedded_image_xobjects": 9,
+    "expected_images": 9,
+    "pages_without_extractable_text": [],
+    "title": "vLLM 低比特量化实践：AutoRound 核心机制与架构优化",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16991,
+      "translated_chars": 42383,
+      "source_images": 9,
+      "translated_images": 9,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\auto_round_vllm_vlm_low_bit\\final\\blog.en.docx",
+      "size": 2510521,
+      "pass": true,
+      "paragraphs": 221,
+      "headings": 42,
+      "numbered_paragraphs": 49,
+      "tables": 10,
+      "embedded_images": 9,
+      "media_parts": 9,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\auto_round_vllm_vlm_low_bit\\final\\blog.en.pdf",
+      "size": 3011033,
+      "pass": true,
+      "pages": 21,
+      "encrypted": false,
+      "embedded_image_xobjects": 9,
+      "expected_images": 9,
+      "pages_without_extractable_text": [],
+      "title": "Low-Bit Quantization in Practice with vLLM: Core Mechanisms and Architectural Optimizations of AutoRound",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}
