@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16495,
+  "image_count": 9,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-09.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-15.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-17.png",
+    "assets/slides/slide-18.png",
+    "assets/slides/slide-23.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\minimax_h3_vllm_omni\\final\\blog.docx",
+    "size": 1439293,
+    "pass": true,
+    "paragraphs": 251,
+    "headings": 42,
+    "numbered_paragraphs": 58,
+    "tables": 10,
+    "embedded_images": 9,
+    "media_parts": 9,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\minimax_h3_vllm_omni\\final\\blog.pdf",
+    "size": 2423790,
+    "pass": true,
+    "pages": 19,
+    "encrypted": false,
+    "embedded_image_xobjects": 9,
+    "expected_images": 9,
+    "pages_without_extractable_text": [],
+    "title": "生产环境下的音视频联合生成：MiniMax-H3 与 vLLM-Omni 架构解析",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16495,
+      "translated_chars": 42266,
+      "source_images": 9,
+      "translated_images": 9,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": [
+        "100",
+        "1d"
+      ]
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\minimax_h3_vllm_omni\\final\\blog.en.docx",
+      "size": 1439220,
+      "pass": true,
+      "paragraphs": 251,
+      "headings": 42,
+      "numbered_paragraphs": 58,
+      "tables": 10,
+      "embedded_images": 9,
+      "media_parts": 9,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\minimax_h3_vllm_omni\\final\\blog.en.pdf",
+      "size": 1963819,
+      "pass": true,
+      "pages": 22,
+      "encrypted": false,
+      "embedded_image_xobjects": 9,
+      "expected_images": 9,
+      "pages_without_extractable_text": [],
+      "title": "Joint Audio-Video Generation in Production: Architecture Deep Dive into MiniMax-H3 and vLLM-Omni",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

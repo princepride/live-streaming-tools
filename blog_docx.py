@@ -229,9 +229,22 @@ def inline_math_to_plain(value: str) -> str:
     return re.sub(r"(?<!\\)\$([^$\n]+)\$", lambda match: latex_to_plain(match.group(1)), value)
 
 
+def add_code_run(paragraph, text: str, *, bold: bool = False):
+    run = paragraph.add_run(text)
+    set_run_font(run, size=9.5, color=DARK_BLUE, ascii_font="Consolas",
+                 east_asia_font="Microsoft YaHei", bold=bold or None)
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:fill"), "EEF2F6")
+    run._element.get_or_add_rPr().append(shd)
+    return run
+
+
 def add_inline(paragraph, text: str, *, default_size: float | None = None,
                default_color: str | None = None) -> None:
     text = inline_math_to_plain(text)
+    # MkDocs renders <sub>/<sup> natively; Word has no equivalent in this path.
+    text = re.sub(r"<sub>(.*?)</sub>", r"_\1", text, flags=re.DOTALL)
+    text = re.sub(r"<sup>(.*?)</sup>", r"^\1", text, flags=re.DOTALL)
 
     def apply_default(run, *, bold: bool | None = None, italic: bool | None = None) -> None:
         if default_size is not None or default_color is not None:
@@ -249,15 +262,17 @@ def add_inline(paragraph, text: str, *, default_size: float | None = None,
             apply_default(run)
         token = match.group(0)
         if token.startswith("**"):
-            run = paragraph.add_run(token[2:-2])
-            apply_default(run, bold=True)
+            # Inline code nested inside bold, e.g. **`cu_seqlens` and masks**, would
+            # otherwise keep its literal backticks: the bold branch consumes the
+            # whole span before the code branch ever sees it.
+            for piece in re.split(r"(`[^`]+`)", token[2:-2]):
+                if len(piece) > 1 and piece.startswith("`") and piece.endswith("`"):
+                    add_code_run(paragraph, piece[1:-1], bold=True)
+                elif piece:
+                    run = paragraph.add_run(piece)
+                    apply_default(run, bold=True)
         elif token.startswith("`"):
-            run = paragraph.add_run(token[1:-1])
-            set_run_font(run, size=9.5, color=DARK_BLUE, ascii_font="Consolas",
-                         east_asia_font="Microsoft YaHei")
-            shd = OxmlElement("w:shd")
-            shd.set(qn("w:fill"), "EEF2F6")
-            run._element.get_or_add_rPr().append(shd)
+            add_code_run(paragraph, token[1:-1])
         elif token.startswith("*"):
             run = paragraph.add_run(token[1:-1])
             apply_default(run, italic=True)
@@ -504,7 +519,7 @@ def _configure_section(document: Document, title: str, language: str) -> None:
     paragraph = header.paragraphs[0]
     paragraph.paragraph_format.space_after = Pt(0)
     paragraph.paragraph_format.tab_stops.add_tab_stop(Inches(6.5))
-    left = paragraph.add_run(title[:52])
+    left = paragraph.add_run(_header_title(title, 52))
     set_run_font(left, size=8.5, color=MUTED, bold=True)
 
     footer = section.footer
@@ -514,6 +529,17 @@ def _configure_section(document: Document, title: str, language: str) -> None:
     label = footer_p.add_run(f"{footer_label}  ·  ")
     set_run_font(label, size=9, color=MUTED)
     _add_page_field(footer_p)
+
+
+def _header_title(title: str, limit: int) -> str:
+    """Clip the running header without severing a word ("… Production: Architec")."""
+    if len(title) <= limit:
+        return title
+    clipped = title[:limit - 3]
+    head, separator, _ = clipped.rpartition(" ")
+    if separator and len(head) >= limit // 2:
+        clipped = head
+    return clipped.rstrip(" ,;:-") + "..."
 
 
 def _extract_title(lines: list[str]) -> tuple[str, str, list[str]]:

@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">MULTIMODAL GENERATION · SERVING</span>
+
+    **MiniMax-H3 与 vLLM-Omni 音视频联合生成**
+
+    ---
+
+    从 118 GB 权重、58 758 token 长序列与 50 步去噪的三重压力出发，拆解共享 DiT 的打包序列、CPU 卸载与 DLO、Ulysses 与分块 VAE、跨步缓存与步级调度。
+
+    [阅读中文](minimax_h3_vllm_omni/final/blog.md)
+    · [English](minimax_h3_vllm_omni/final/blog.en.md)
+
 -   <span class="article-kicker">ARCHITECTURE · MEMORY</span>
 
     **Kimi K3 day-0支持背后的技术细节**

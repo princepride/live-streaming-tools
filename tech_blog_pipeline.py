@@ -17,6 +17,7 @@ import html
 from html.parser import HTMLParser
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -380,6 +381,19 @@ class CodexClient:
         )
 
 
+def _opc_part_name(target: str, base: str = "ppt") -> str:
+    """Resolve an OPC relationship target to a zip member name.
+
+    Targets are either absolute inside the package ("/ppt/slides/slide1.xml",
+    written by some PowerPoint exporters) or relative to the folder holding the
+    part that owns the relationship ("slides/slide1.xml", "../media/image1.png").
+    """
+    target = target.strip()
+    if target.startswith("/"):
+        return target.lstrip("/")
+    return posixpath.normpath(f"{base}/{target}").lstrip("./")
+
+
 def _pptx_slide_texts(pptx: Path) -> list[str]:
     """Extract visible slide text in presentation order without requiring Office."""
     p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -400,7 +414,7 @@ def _pptx_slide_texts(pptx: Path) -> list[str]:
             if not target:
                 result.append("")
                 continue
-            member = "ppt/" + target.lstrip("/").replace("../", "")
+            member = _opc_part_name(target)
             slide = ET.fromstring(archive.read(member))
             values = [node.text or "" for node in slide.findall(f".//{{{a_ns}}}t")]
             result.append("\n".join(value.strip() for value in values if value.strip()))
@@ -471,8 +485,7 @@ def _extract_full_slide_images(slides: Path, destination: Path) -> list[Path] | 
                 ]
                 if len(image_targets) != 1:
                     return None
-                target = image_targets[0].replace("../", "")
-                member = "ppt/" + target.lstrip("/")
+                member = _opc_part_name(image_targets[0], "ppt/slides")
                 suffix = Path(member).suffix.lower()
                 if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
                     return None

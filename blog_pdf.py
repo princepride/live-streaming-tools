@@ -73,17 +73,27 @@ def register_fonts(language: str = "zh") -> tuple[str, str]:
     return regular_name, bold_name
 
 
+GLYPH_FALLBACKS = str.maketrans({
+    "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3", "₄": "_4",
+    "₅": "_5", "₆": "_6", "₇": "_7", "₈": "_8", "₉": "_9",
+    # The Latin PDF font has no circled digits, so transliterate the whole
+    # run rather than only the first four (⑤ onward rendered as tofu).
+    "①": "1)", "②": "2)", "③": "3)", "④": "4)", "⑤": "5)",
+    "⑥": "6)", "⑦": "7)", "⑧": "8)", "⑨": "9)", "⑩": "10)",
+    "✓": "check", "✗": "no", "～": "~",
+})
+
+
+def strip_sub_sup(text: str) -> str:
+    """Flatten the HTML sub/sup MkDocs renders natively but the builders cannot."""
+    text = re.sub(r"<sub>(.*?)</sub>", r"_\1", text, flags=re.DOTALL)
+    return re.sub(r"<sup>(.*?)</sup>", r"^\1", text, flags=re.DOTALL)
+
+
 def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
     text = inline_math_to_plain(text)
-    text = text.translate(str.maketrans({
-        "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3", "₄": "_4",
-        "₅": "_5", "₆": "_6", "₇": "_7", "₈": "_8", "₉": "_9",
-        # The Latin PDF font has no circled digits, so transliterate the whole
-        # run rather than only the first four (⑤ onward rendered as tofu).
-        "①": "1)", "②": "2)", "③": "3)", "④": "4)", "⑤": "5)",
-        "⑥": "6)", "⑦": "7)", "⑧": "8)", "⑨": "9)", "⑩": "10)",
-        "✓": "check", "✗": "no", "～": "~",
-    }))
+    text = strip_sub_sup(text)
+    text = text.translate(GLYPH_FALLBACKS)
     text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1", text)
     text = re.sub(r"[\u2011\u2013\u2014]+", " - ", text)
     parts: list[str] = []
@@ -92,7 +102,17 @@ def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
         parts.append(html.escape(text[position:match.start()]))
         token = match.group(0)
         if token.startswith("**"):
-            parts.append(f'<font name="{bold_font}">{html.escape(token[2:-2])}</font>')
+            # Inline code nested inside bold, e.g. **`cu_seqlens` and masks**, would
+            # otherwise keep its literal backticks: the bold branch consumes the
+            # whole span before the code branch ever sees it.
+            pieces = []
+            for piece in re.split(r"(`[^`]+`)", token[2:-2]):
+                if len(piece) > 1 and piece.startswith("`") and piece.endswith("`"):
+                    pieces.append(f'<font name="Courier" color="#1F4D78" '
+                                  f'backColor="#EEF2F6">{html.escape(piece[1:-1])}</font>')
+                elif piece:
+                    pieces.append(html.escape(piece))
+            parts.append(f'<font name="{bold_font}">{"".join(pieces)}</font>')
         elif token.startswith("`"):
             parts.append(f'<font name="Courier" color="#1F4D78" backColor="#EEF2F6">'
                          f'{html.escape(token[1:-1])}</font>')
@@ -307,11 +327,22 @@ def _collect_list(lines: list[str], start: int, ordered: bool,
     return flow, index
 
 
+def _header_title(title: str, limit: int = 58) -> str:
+    """Clip the running header without severing a word ("… Architecture D")."""
+    if len(title) <= limit:
+        return title
+    clipped = title[:limit - 3]
+    head, separator, _ = clipped.rpartition(" ")
+    if separator and len(head) >= limit // 2:
+        clipped = head
+    return clipped.rstrip(" ,;:-") + "..."
+
+
 def _page_header_footer(canvas, document, *, title: str, regular: str, language: str) -> None:
     canvas.saveState()
     canvas.setFont(regular, 7.8)
     canvas.setFillColor(MUTED)
-    canvas.drawString(document.leftMargin, LETTER[1] - 0.52 * inch, title[:58])
+    canvas.drawString(document.leftMargin, LETTER[1] - 0.52 * inch, _header_title(title))
     footer_label = "Technical Deep Dive" if language == "en" else "技术深度解析"
     canvas.drawRightString(LETTER[0] - document.rightMargin, 0.48 * inch,
                            f"{footer_label}  ·  {canvas.getPageNumber()}")
@@ -386,7 +417,10 @@ def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str
                 index += 1
             if index < len(lines):
                 index += 1
-            code_text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1", "\n".join(code_lines))
+            # The monospace face has no subscript or circled-digit glyphs either,
+            # so code blocks need the same transliteration as inline text.
+            code_text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1",
+                               "\n".join(code_lines).translate(GLYPH_FALLBACKS))
             story.append(Preformatted(code_text, styles["code_block"], maxLineLength=88))
             continue
         if stripped in {r"\[", "$$"}:
