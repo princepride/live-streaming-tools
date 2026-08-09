@@ -1069,7 +1069,7 @@ def translation_qa(source: str, translated: str) -> dict[str, Any]:
             value,
         )
         tokens = re.findall(
-            r"(?<![A-Za-z0-9])(?:\d{1,3}(?:[ ,]\d{3})+|\d+(?:[,.]\d+)*)"
+            r"(?<![A-Za-z0-9])(?:\d{1,3}(?:[ ,]\d{3})+|\d+(?:\.\d+)?)"
             r"(?:\s*[kK])?(?:%|[A-Za-z]+/s|[A-Za-z]+)?(?:st|nd|rd|th)?",
             value,
         )
@@ -1245,14 +1245,25 @@ def main() -> int:
     atomic_text(root / "drafts" / "edited.md", edited)
     review = review_article(client, edited, outline, evidence, args.critic_model)
     atomic_json(root / "cache" / "review.json", review)
-    actionable = [issue for issue in review["issues"] if issue["severity"] in {"P0", "P1", "P2"}]
     final = edited
-    if actionable and not args.no_repair:
-        log(f"  发现 {len(actionable)} 个需要修复的问题，执行定点修复")
-        final = global_edit(client, edited, outline, evidence, args.writer_model,
-                            stage="review-repair", issues=actionable)
+    for repair_round in range(1, 6):
+        actionable = [
+            issue for issue in review["issues"]
+            if issue["severity"] in {"P0", "P1", "P2"}
+        ]
+        if not actionable or args.no_repair:
+            break
+        log(f"  第 {repair_round} 轮发现 {len(actionable)} 个需要修复的问题，执行定点修复")
+        stage = "review-repair" if repair_round == 1 else f"review-repair-{repair_round}"
+        final = global_edit(client, final, outline, evidence, args.writer_model,
+                            stage=stage, issues=actionable)
         review = review_article(client, final, outline, evidence, args.critic_model)
-        atomic_json(root / "cache" / "review-after-repair.json", review)
+        review_name = (
+            "review-after-repair.json"
+            if repair_round == 1
+            else f"review-after-repair-{repair_round}.json"
+        )
+        atomic_json(root / "cache" / review_name, review)
 
     log("[7/7] 确定性检查并写出成稿")
     final_path = root / "final" / "blog.md"

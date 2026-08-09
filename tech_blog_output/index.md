@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">CONTEXT PARALLELISM · LONG CONTEXT</span>
+
+    **vLLM PCP 与 DCP 上下文并行**
+
+    ---
+
+    从 KVCache 分布式存储与长序列 Prefill 切分出发，拆解 DCP、PCP、Chunk Swap、AllGather Q/KV、TPA 与动态 CP 的工程权衡。
+
+    [阅读中文](vllm_pcp_dcp/final/blog.md)
+    · [English](vllm_pcp_dcp/final/blog.en.md)
+
 -   <span class="article-kicker">SERVING ARCHITECTURE · RUST</span>
 
     **vLLM Rust 前端架构演进**
