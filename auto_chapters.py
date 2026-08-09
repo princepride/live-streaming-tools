@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import concurrent.futures
 import json
 import math
 import os
@@ -19,9 +17,11 @@ from pathlib import Path
 
 import requests
 
+import stt
+
 
 API_BASE = "https://openrouter.ai/api/v1"
-DEFAULT_STT_MODEL = "openai/gpt-4o-mini-transcribe"
+DEFAULT_STT_MODEL = "openai/whisper-large-v3"
 DEFAULT_CHAPTER_MODEL = "google/gemini-3.1-pro-preview"
 
 
@@ -104,35 +104,6 @@ def request_json(url: str, headers: dict, payload: dict, timeout: int, retries: 
     raise RuntimeError(error)
 
 
-def extract_audio(media: Path, output: Path, start: float, length: float) -> None:
-    run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-        "-ss", str(start), "-t", str(length), "-i", str(media),
-        "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", str(output),
-    ])
-
-
-def transcribe_one(index: int, media: Path, cache_dir: Path, start: float, end: float,
-                   headers: dict, model: str, language: str) -> dict:
-    cached = cache_dir / f"part_{index:04d}.json"
-    if cached.exists():
-        return json.loads(cached.read_text(encoding="utf-8"))
-    audio = cache_dir / f"part_{index:04d}.mp3"
-    extract_audio(media, audio, start, end - start)
-    encoded = base64.b64encode(audio.read_bytes()).decode("ascii")
-    payload = {
-        "model": model,
-        "input_audio": {"data": encoded, "format": "mp3"},
-        "language": language,
-        "temperature": 0,
-    }
-    result = request_json(f"{API_BASE}/audio/transcriptions", headers, payload, timeout=300)
-    item = {"start": round(start, 3), "end": round(end, 3), "text": result.get("text", "").strip()}
-    cached.write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
-    audio.unlink(missing_ok=True)
-    return item
-
-
 def parse_json_content(content: str) -> dict:
     content = content.strip()
     if content.startswith("```"):
@@ -154,7 +125,9 @@ def make_chapters(transcript: list[dict], duration: float, headers: dict, model:
         for i, x in enumerate(transcript)
     )
     slice_count = len(transcript)
-    typical_slice_seconds = max(1, round(transcript[0]["end"] - transcript[0]["start"]))
+    # Fine-mode slices are short, uneven sentences; use the average length so the
+    # min/max-slice guidance stays stable regardless of any single segment.
+    typical_slice_seconds = max(1, round(duration / max(1, slice_count)))
     min_slices = max(1, math.ceil(min_minutes * 60 / typical_slice_seconds))
     # The count cap may require slightly longer chapters than max_minutes.
     max_slices = max(
@@ -301,6 +274,9 @@ def main() -> int:
     parser.add_argument("--max-title-chars", type=int, default=16, help="章节标题字符上限（默认 16）")
     parser.add_argument("--workers", type=int, default=3, help="并行转写数（默认 3）")
     parser.add_argument("--language", default="zh", help="音频语言 ISO 代码（默认 zh）")
+    parser.add_argument("--stt-backend", default="openrouter",
+                        choices=["openrouter", "groq", "openai", "local"],
+                        help="转写后端（默认 openrouter，共用 stt.py）")
     parser.add_argument("--stt-model", default=DEFAULT_STT_MODEL)
     parser.add_argument("--chapter-model", default=DEFAULT_CHAPTER_MODEL)
     args = parser.parse_args()
@@ -324,26 +300,18 @@ def main() -> int:
     output = args.output or Path.cwd() / f"{args.media.stem}_chapters.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     safe_model = re.sub(r"[^A-Za-z0-9_.-]+", "_", args.stt_model)
-    cache_dir = output.parent / f".{output.stem}_cache_{args.chunk_seconds}_{safe_model}_{args.language}"
+    cache_dir = output.parent / f".{output.stem}_cache_{args.chunk_seconds}_{safe_model}_{args.language}_fine"
     cache_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "X-Title": "Bilibili Auto Chapters"}
     duration = media_duration(args.media)
-    spans = [(i, i * args.chunk_seconds, min(duration, (i + 1) * args.chunk_seconds))
-             for i in range(int((duration + args.chunk_seconds - 1) // args.chunk_seconds))]
-    log(f"媒体时长 {stamp(duration)}，共 {len(spans)} 个转写切片")
-
-    transcript = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-        futures = {
-            pool.submit(transcribe_one, i, args.media, cache_dir, start, end, headers, args.stt_model, args.language): i
-            for i, start, end in spans
-        }
-        done = 0
-        for future in concurrent.futures.as_completed(futures):
-            transcript.append(future.result())
-            done += 1
-            log(f"转写进度：{done}/{len(spans)}")
-    transcript.sort(key=lambda x: x["start"])
+    log(f"媒体时长 {stamp(duration)}，开始转写（后端 {args.stt_backend}，模型 {args.stt_model}）")
+    transcript = stt.transcribe(
+        args.media, backend=args.stt_backend, model=args.stt_model,
+        language=args.language, chunk_seconds=args.chunk_seconds, mode="fine",
+        cache_dir=cache_dir, workers=args.workers,
+    )
+    if not transcript:
+        parser.error("转写结果为空，请检查音频与 API 配置")
     log("正在按主题合并并生成章节……")
     chapters = make_chapters(
         transcript, duration, headers, args.chapter_model,

@@ -1,0 +1,4 @@
+interface:
+  display_name: "剪出金句短片段"
+  short_description: "Find golden-quote highlights in a long video and cut ~60s clips"
+  default_prompt: "Use $make-highlight-clips to find the golden-quote moments in my video and cut them into clips."

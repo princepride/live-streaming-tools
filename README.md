@@ -56,6 +56,7 @@ mkdocs serve
 - `$make-video-chapters`：为单个视频/音频生成 B 站章节，或用 BBDown 下载并处理整个合集；默认校验最多 10 章、标题最多 16 个字符。
 - `$make-technical-blog`：将技术视频和 PDF/PPTX 等课件整理为带图片的中英文 Markdown、DOCX 与 PDF，并同步更新 README 博客索引与 GitHub Pages 站点（`mkdocs.yml` 导航和首页卡片）。
 - `$validate-stream-artifacts`：确定性检查章节时间线，以及博客 Markdown 图片、DOCX 完整性、PDF 页面和中英文资源一致性，并指导逐页视觉复核。
+- `$make-highlight-clips`：从长视频里挖掘「金句」精彩瞬间，剪成约 60 秒短片段。四步人机协作流水线（细时间戳转录 → LLM 找金句并出报告 → 交互式 HTML 勾选 → ffmpeg 剪出横屏原片与竖屏 9:16）；金句检测支持 OpenRouter 或本地模型后端；转录默认走 OpenRouter 的 `openai/whisper-large-v3`（`verbose_json` 带时间戳，复用 `OPENROUTER_API_KEY`），也可切 Groq / OpenAI / 本地 faster-whisper。
 
 示例请求：
 

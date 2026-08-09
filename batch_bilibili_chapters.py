@@ -85,6 +85,7 @@ def make_chapters(media: Path, output_dir: Path, args: argparse.Namespace) -> No
         "-o", str(output), "--max-chapters", str(args.max_chapters),
         "--max-title-chars", str(args.max_title_chars), "--workers", str(args.workers),
         "--chapter-model", args.chapter_model,
+        "--stt-backend", args.stt_backend, "--stt-model", args.stt_model,
     ]
     subprocess.run(command, check=True)
 
@@ -99,6 +100,11 @@ def main() -> int:
     parser.add_argument("--max-title-chars", type=int, default=16)
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--chapter-model", default="google/gemini-3.1-pro-preview")
+    parser.add_argument("--stt-backend", default="openrouter",
+                        choices=["openrouter", "groq", "openai", "local"],
+                        help="转写后端（默认 openrouter，透传给 auto_chapters.py）")
+    parser.add_argument("--stt-model", default="openai/whisper-large-v3",
+                        help="转写模型（默认 openai/whisper-large-v3）")
     parser.add_argument("--force-chapters", action="store_true", help="复用转写缓存，强制重新生成章节")
     parser.add_argument("--download-only", action="store_true")
     parser.add_argument("--chapters-only", action="store_true")
