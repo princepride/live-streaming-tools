@@ -1251,6 +1251,8 @@ def main() -> int:
         log(f"  发现 {len(actionable)} 个需要修复的问题，执行定点修复")
         final = global_edit(client, edited, outline, evidence, args.writer_model,
                             stage="review-repair", issues=actionable)
+        review = review_article(client, final, outline, evidence, args.critic_model)
+        atomic_json(root / "cache" / "review-after-repair.json", review)
 
     log("[7/7] 确定性检查并写出成稿")
     final_path = root / "final" / "blog.md"

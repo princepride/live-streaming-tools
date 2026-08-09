@@ -43,6 +43,7 @@ theme:
 nav:
   - 首页: index.md
   - 中文博客:
+      - vLLM Rust 前端架构演进: vllm_rust_frontend_refactor/final/blog.md
       - MiniMax-H3 与 vLLM-Omni 音视频联合生成: minimax_h3_vllm_omni/final/blog.md
       - Kimi K3 day-0支持背后的技术细节: kimi_k3_vllm/final/blog.md
       - DSpark 投机解码: dspark_speculative_decoding/final/blog.md
@@ -53,6 +54,7 @@ nav:
       - vLLM 低比特量化实践：AutoRound: auto_round_vllm_vlm_low_bit/final/blog.md
       - GLM-5 昇腾推理优化: ascend_glm5_deployment/final/blog.md
   - English:
+      - Architectural Evolution of the vLLM Rust Frontend: vllm_rust_frontend_refactor/final/blog.en.md
       - Joint Audio-Video Generation with MiniMax-H3 and vLLM-Omni: minimax_h3_vllm_omni/final/blog.en.md
       - The technical details behind Kimi K3's Day-0 support: kimi_k3_vllm/final/blog.en.md
       - DSpark Speculative Decoding: dspark_speculative_decoding/final/blog.en.md

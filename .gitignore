@@ -14,6 +14,8 @@ __pycache__/
 .agents/*
 !.agents/skills/
 !.agents/skills/**
+.agents/skills/**/__pycache__/
+.agents/skills/**/*.py[cod]
 .cache/
 tmp/
 

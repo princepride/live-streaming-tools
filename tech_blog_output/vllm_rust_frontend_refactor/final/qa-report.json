@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 17946,
+  "image_count": 4,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_rust_frontend_refactor\\final\\blog.docx",
+    "size": 820494,
+    "pass": true,
+    "paragraphs": 261,
+    "headings": 44,
+    "numbered_paragraphs": 47,
+    "tables": 10,
+    "embedded_images": 4,
+    "media_parts": 4,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_rust_frontend_refactor\\final\\blog.pdf",
+    "size": 1821151,
+    "pass": true,
+    "pages": 17,
+    "encrypted": false,
+    "embedded_image_xobjects": 4,
+    "expected_images": 4,
+    "pages_without_extractable_text": [],
+    "title": "突破 Python 性能瓶颈：vLLM Rust 前端架构演进与核心原理解析",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 17946,
+      "translated_chars": 45286,
+      "source_images": 4,
+      "translated_images": 4,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_rust_frontend_refactor\\final\\blog.en.docx",
+      "size": 820159,
+      "pass": true,
+      "paragraphs": 261,
+      "headings": 44,
+      "numbered_paragraphs": 47,
+      "tables": 10,
+      "embedded_images": 4,
+      "media_parts": 4,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_rust_frontend_refactor\\final\\blog.en.pdf",
+      "size": 1334480,
+      "pass": true,
+      "pages": 21,
+      "encrypted": false,
+      "embedded_image_xobjects": 4,
+      "expected_images": 4,
+      "pages_without_extractable_text": [],
+      "title": "Breaking Through Python's Performance Bottleneck: Architectural Evolution and Core Principles of the vLLM Rust Frontend",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

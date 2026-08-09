@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">SERVING ARCHITECTURE · RUST</span>
+
+    **vLLM Rust 前端架构演进**
+
+    ---
+
+    从 ZMQ 前后端边界切入，拆解五层 Rust 前端、Stream-Native 数据流、解析器组合子，以及单进程高并发下的吞吐与延迟优势。
+
+    [阅读中文](vllm_rust_frontend_refactor/final/blog.md)
+    · [English](vllm_rust_frontend_refactor/final/blog.en.md)
+
 -   <span class="article-kicker">MULTIMODAL GENERATION · SERVING</span>
 
     **MiniMax-H3 与 vLLM-Omni 音视频联合生成**
