@@ -52,11 +52,18 @@ references/
 !tech_blog_output/javascripts/
 !tech_blog_output/javascripts/**
 !tech_blog_output/assets/
+!tech_blog_output/assets/parallelism-explorer.css
+!tech_blog_output/assets/parallelism-explorer.js
 !tech_blog_output/assets/branding/
 !tech_blog_output/assets/branding/vllm-mascots-study.png
+!tech_blog_output/parallelism_explorer/
+!tech_blog_output/parallelism_explorer/index.md
 
 # Local MkDocs build output
 site/
+
+# Generated standalone explorer (the published version lives in MkDocs)
+/vllm-parallel-layer-viz.html
 
 # Source media and extracted audio
 *.mp4
