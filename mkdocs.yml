@@ -42,6 +42,8 @@ theme:
 
 nav:
   - 首页: index.md
+  - 互动工具:
+      - 并行切分可视化 · Parallelism Explorer: parallelism_explorer/index.md
   - 中文博客:
       - vLLM PCP 与 DCP 上下文并行: vllm_pcp_dcp/final/blog.md
       - vLLM Rust 前端架构演进: vllm_rust_frontend_refactor/final/blog.md

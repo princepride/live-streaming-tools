@@ -1,0 +1,2778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Parallelism Explorer · 并行切分可视化</title>
+<style>
+/* 离线版自带一份最小主题变量，对齐文档站 extra.css 的取值 */
+:root {
+  --md-text-font: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --md-code-font: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  --vllm-ink: #111827; --vllm-slate: #334155; --vllm-muted: #64748b;
+  --vllm-line: #e2e8f0; --vllm-paper: #f8fafc; --vllm-accent: #3b82f6;
+}
+body[data-md-color-scheme="slate"] {
+  --vllm-ink: #f8fafc; --vllm-slate: #dbe4ef; --vllm-muted: #94a3b8;
+  --vllm-line: #263244; --vllm-paper: #121923; --vllm-accent: #60a5fa;
+}
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--vllm-paper);
+  color: var(--vllm-ink);
+  font-family: var(--md-text-font);
+  font-size: 16px;
+}
+body[data-md-color-scheme="slate"] { background: #0b1119; }
+.page { max-width: 84rem; margin: 0 auto; padding: 1.6rem 1.2rem 5rem; }
+.themebtn {
+  position: fixed; top: .8rem; right: .9rem; z-index: 9;
+  padding: .32rem .8rem; border: 1px solid var(--vllm-line); border-radius: .4rem;
+  background: var(--vllm-paper); color: var(--vllm-muted);
+  font-family: var(--md-code-font); font-size: .72rem; font-weight: 700; cursor: pointer;
+}
+</style>
+<style data-pe-style="1">
+/* ==========================================================================
+   Parallelism Explorer — 并行切分可视化
+   样式跟随站点主题（Material palette + extra.css 的 --vllm-* 变量）
+   所有规则都限定在 .pe 作用域内，避免污染其它文章页。
+   ========================================================================== */
+
+.pe {
+  /* --- 面板与文字：由站点变量派生 --- */
+  --pe-fg: var(--vllm-ink, #111827);
+  --pe-slate: var(--vllm-slate, #334155);
+  --pe-dim: var(--vllm-muted, #64748b);
+  --pe-line: var(--vllm-line, #e2e8f0);
+  --pe-panel: var(--vllm-paper, #f8fafc);
+  --pe-panel2: #ffffff;
+  --pe-accent: var(--vllm-accent, #3b82f6);
+  --pe-shadow: 0 0.35rem 1.1rem rgba(15, 23, 42, 0.06);
+
+  /* --- SVG 用色（inline SVG 继承 CSS 变量） --- */
+  --pe-svg-fg: #1f2937;
+  --pe-svg-dim: #64748b;
+  --pe-svg-faint: #94a3b8;
+  --pe-svg-line: #cbd5e1;
+  --pe-svg-neutral: #e2e8f0;
+  --pe-svg-cell-off: #f1f5f9;
+  --pe-hatch-bg: #e8edf4;
+  --pe-hatch-line: #94a3b8;
+  --pe-on-shard: #ffffff;
+  --pe-on-shard-dim: #64748b;
+
+  /* --- 语义色 --- */
+  --pe-warn: #d97706;
+  --pe-warn-bg: #fffbeb;
+  --pe-warn-line: #fcd34d;
+  --pe-err: #dc2626;
+  --pe-err-bg: #fef2f2;
+  --pe-err-line: #fca5a5;
+  --pe-ok: #059669;
+  --pe-ok-bg: #ecfdf5;
+  --pe-ok-line: #6ee7b7;
+
+  /* --- 并行维度色 --- */
+  --pe-tp: #2563eb;
+  --pe-pcp: #d97706;
+  --pe-dcp: #0d9488;
+  --pe-pp: #7c3aed;
+  --pe-dp: #db2777;
+  --pe-ep: #a16207;
+  --pe-sp: #0891b2;
+  --pe-uly: #059669;
+  --pe-ring: #0284c7;
+  --pe-cfg: #c026d3;
+  --pe-vae: #ea580c;
+  --pe-txt: #6d28d9;
+
+  margin: 0 0 2rem;
+  color: var(--pe-fg);
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+
+[data-md-color-scheme="slate"] .pe {
+  --pe-panel: #0f1720;
+  --pe-panel2: #0b1119;
+  --pe-shadow: none;
+
+  --pe-svg-fg: #e2e8f0;
+  --pe-svg-dim: #94a3b8;
+  --pe-svg-faint: #64748b;
+  --pe-svg-line: #334155;
+  --pe-svg-neutral: #253242;
+  --pe-svg-cell-off: #131c27;
+  --pe-hatch-bg: #22303f;
+  --pe-hatch-line: #6b8ab0;
+  --pe-on-shard: #0b1119;
+  --pe-on-shard-dim: #8095ad;
+
+  --pe-warn: #fbbf24;
+  --pe-warn-bg: #241c0e;
+  --pe-warn-line: #78551d;
+  --pe-err: #fca5a5;
+  --pe-err-bg: #261315;
+  --pe-err-line: #7f2a2f;
+  --pe-ok: #6ee7b7;
+  --pe-ok-bg: #0d2019;
+  --pe-ok-line: #1d5c45;
+
+  --pe-tp: #60a5fa;
+  --pe-pcp: #fbbf24;
+  --pe-dcp: #2dd4bf;
+  --pe-pp: #c4b5fd;
+  --pe-dp: #f9a8d4;
+  --pe-ep: #fcd34d;
+  --pe-sp: #22d3ee;
+  --pe-uly: #6ee7b7;
+  --pe-ring: #7dd3fc;
+  --pe-cfg: #f0abfc;
+  --pe-vae: #fdba74;
+  --pe-txt: #c4b5fd;
+}
+
+/* ---------- 页头 ---------- */
+.pe-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--pe-line);
+}
+.pe-eyebrow {
+  margin: 0 0 0.5rem;
+  color: var(--pe-accent);
+  font-family: var(--md-code-font);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+.pe-head h2 {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  color: var(--pe-fg);
+  font-size: 1.28rem;
+  font-weight: 760;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.pe-head .pe-lead {
+  margin: 0.55rem 0 0;
+  max-width: 46rem;
+  color: var(--pe-dim);
+  font-size: 0.72rem;
+  line-height: 1.8;
+}
+.pe-lang {
+  display: flex;
+  flex: none;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.4rem;
+}
+.pe-lang button {
+  padding: 0.32rem 0.72rem;
+  border: 0;
+  background: transparent;
+  color: var(--pe-dim);
+  font-family: var(--md-code-font);
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+.pe-lang button.on {
+  background: var(--pe-fg);
+  color: var(--pe-panel);
+}
+
+/* ---------- 通用面板 ---------- */
+.pe-panel {
+  margin-bottom: 1rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.55rem;
+  background: var(--pe-panel);
+  box-shadow: var(--pe-shadow);
+}
+.pe-h {
+  margin: 0 0 0.85rem;
+  color: var(--pe-dim);
+  font-family: var(--md-code-font);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.pe-h .pe-hn {
+  color: var(--pe-dim);
+  font-family: var(--md-text-font);
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.pe code,
+.pe .pe-code {
+  padding: 0.05rem 0.28rem;
+  border-radius: 0.2rem;
+  background: color-mix(in srgb, var(--pe-dim) 13%, transparent);
+  color: inherit;
+  font-family: var(--md-code-font);
+  font-size: 0.92em;
+  word-break: break-word;
+}
+
+/* ---------- 控件 ---------- */
+.pe-cls {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+.pe-clsbtn {
+  padding: 0.36rem 0.95rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.4rem;
+  background: var(--pe-panel2);
+  color: var(--pe-dim);
+  font-size: 0.71rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+.pe-clsbtn.on {
+  border-color: var(--pe-fg);
+  background: var(--pe-fg);
+  color: var(--pe-panel);
+}
+.pe-ctl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.4rem, 1fr));
+  gap: 0.55rem;
+}
+.pe-ctl label {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--pe-dim);
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+}
+.pe select,
+.pe input {
+  width: 100%;
+  padding: 0.34rem 0.42rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.32rem;
+  background: var(--pe-panel2);
+  color: var(--pe-fg);
+  font-family: inherit;
+  font-size: 0.72rem;
+}
+.pe select:focus,
+.pe input:focus {
+  border-color: var(--pe-accent);
+  outline: none;
+}
+.pe-d-tp label { color: var(--pe-tp); }
+.pe-d-pcp label { color: var(--pe-pcp); }
+.pe-d-dcp label { color: var(--pe-dcp); }
+.pe-d-pp label { color: var(--pe-pp); }
+.pe-d-dp label { color: var(--pe-dp); }
+.pe-d-ep label { color: var(--pe-ep); }
+.pe-d-uly label { color: var(--pe-uly); }
+.pe-d-ring label { color: var(--pe-ring); }
+.pe-d-cfg label { color: var(--pe-cfg); }
+.pe-d-vae label { color: var(--pe-vae); }
+.pe-divider {
+  height: 1px;
+  margin: 0.8rem 0;
+  background: var(--pe-line);
+}
+
+/* ---------- 提示条 ---------- */
+.pe-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid;
+  border-radius: 0.4rem;
+  font-size: 0.71rem;
+  line-height: 1.7;
+}
+.pe-alert b { flex: none; font-weight: 700; }
+.pe-alert.err { border-color: var(--pe-err-line); background: var(--pe-err-bg); color: var(--pe-err); }
+.pe-alert.warn { border-color: var(--pe-warn-line); background: var(--pe-warn-bg); color: var(--pe-warn); }
+.pe-alert.ok { border-color: var(--pe-ok-line); background: var(--pe-ok-bg); color: var(--pe-ok); }
+.pe-alert code { background: color-mix(in srgb, currentColor 14%, transparent); }
+
+/* ---------- KPI ---------- */
+.pe-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem;
+}
+.pe-kpi {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.42rem;
+  background: var(--pe-panel2);
+}
+.pe-kpi .k {
+  color: var(--pe-dim);
+  font-family: var(--md-code-font);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pe-kpi .v {
+  margin-top: 0.15rem;
+  font-size: 1.02rem;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.pe-kpi .n { margin-top: 0.1rem; color: var(--pe-dim); font-size: 0.62rem; }
+
+/* ---------- rank 网格 ---------- */
+.pe-rankgrid { display: flex; flex-wrap: wrap; gap: 0.28rem; }
+.pe-rk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 2.55rem;
+  height: 2.2rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.36rem;
+  background: var(--pe-panel2);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+.pe-rk .t { color: var(--pe-dim); font-size: 0.5rem; line-height: 1.1; }
+.pe-rk.self { border-color: var(--pe-accent); box-shadow: 0 0 0 1px var(--pe-accent) inset; font-weight: 700; }
+.pe-rk.tpg { border-color: var(--pe-tp); }
+.pe-rk.dcpg { box-shadow: 0 0 0 2px var(--pe-dcp) inset; }
+.pe-rk.pcpg { outline: 2px dashed var(--pe-pcp); outline-offset: 1px; }
+.pe-rk.spg { box-shadow: 0 0 0 2px var(--pe-sp) inset; }
+.pe-rk.ulyg { border-color: var(--pe-uly); border-width: 2px; }
+.pe-rk.ringg { outline: 2px dashed var(--pe-ring); outline-offset: 1px; }
+.pe-rk.cfgg { background: color-mix(in srgb, var(--pe-cfg) 12%, var(--pe-panel2)); }
+.pe-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 0.7rem;
+  color: var(--pe-dim);
+  font-size: 0.64rem;
+}
+.pe-legend i {
+  display: inline-block;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-right: 0.28rem;
+  border-radius: 0.15rem;
+  vertical-align: -1px;
+}
+
+/* ---------- 图卡 ---------- */
+.pe-gcards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr));
+  gap: 0.75rem;
+}
+.pe-gcard {
+  padding: 0.7rem 0.7rem 0.45rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.45rem;
+  background: var(--pe-panel2);
+}
+.pe-gcard.wide { grid-column: 1 / -1; }
+.pe-gcard.bare { padding: 0; border: 0; background: none; }
+.pe-gcard .t { margin-bottom: 0.1rem; font-size: 0.74rem; font-weight: 700; }
+.pe-gcard .t .badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.02rem 0.42rem;
+  border: 1px solid currentColor;
+  border-radius: 1rem;
+  font-family: var(--md-code-font);
+  font-size: 0.54rem;
+  letter-spacing: 0.03em;
+  vertical-align: 2px;
+}
+.pe-gcard .d {
+  margin-bottom: 0.35rem;
+  color: var(--pe-dim);
+  font-family: var(--md-code-font);
+  font-size: 0.62rem;
+  line-height: 1.55;
+}
+.pe-gcard svg { display: block; width: 100%; height: auto; }
+.pe-gcard .f {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+  color: var(--pe-dim);
+  font-size: 0.63rem;
+}
+.pe-gcard .f b { color: var(--pe-fg); }
+
+/* ---------- 数据流 ---------- */
+.pe-flow { display: flex; flex-direction: column; }
+.pe-stage {
+  display: grid;
+  grid-template-columns: 11.5rem 1fr 11.5rem;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--pe-line);
+  border-left: 3px solid var(--pe-line);
+  border-radius: 0.42rem;
+  background: var(--pe-panel2);
+}
+.pe-stage .nm { font-size: 0.71rem; font-weight: 700; }
+.pe-stage .nm small {
+  display: block;
+  color: var(--pe-dim);
+  font-size: 0.6rem;
+  font-weight: 400;
+}
+.pe-stage .sh {
+  color: var(--pe-slate);
+  font-family: var(--md-code-font);
+  font-size: 0.62rem;
+  line-height: 1.6;
+}
+.pe-stage .sh em { color: var(--pe-dim); font-style: normal; }
+.pe-stage .rt {
+  color: var(--pe-dim);
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pe-stage .rt b { color: var(--pe-fg); font-weight: 700; }
+.pe-stage.tp { border-left-color: var(--pe-tp); }
+.pe-stage.attn { border-left-color: var(--pe-dcp); }
+.pe-stage.txts { border-left-color: var(--pe-txt); }
+.pe-stage.elem { border-left-color: var(--pe-line); opacity: 0.78; }
+.pe-commbox {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--pe-warn-line);
+  border-left: 3px solid var(--pe-warn);
+  border-radius: 0.42rem;
+  background: var(--pe-warn-bg);
+}
+.pe-commbox .top {
+  display: grid;
+  grid-template-columns: 11.5rem 1fr 11.5rem;
+  gap: 0.65rem;
+  align-items: center;
+}
+.pe-commbox .top .nm { color: var(--pe-warn); font-size: 0.71rem; font-weight: 700; }
+.pe-commbox .top .nm small {
+  display: block;
+  color: var(--pe-dim);
+  font-size: 0.6rem;
+  font-weight: 400;
+}
+.pe-commbox .top .sh { color: var(--pe-slate); font-family: var(--md-code-font); font-size: 0.62rem; }
+.pe-commbox .top .sh em { color: var(--pe-dim); font-style: normal; }
+.pe-commbox .top .rt {
+  color: var(--pe-dim);
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pe-commbox .top .rt b { color: var(--pe-fg); }
+.pe-commbox svg { display: block; width: 100%; height: auto; margin-top: 0.45rem; }
+.pe-arrow {
+  height: 0.6rem;
+  margin-left: 1.4rem;
+  border-left: 2px solid var(--pe-line);
+}
+.pe-tag {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.02rem 0.36rem;
+  border: 1px solid currentColor;
+  border-radius: 1rem;
+  font-family: var(--md-code-font);
+  font-size: 0.53rem;
+  letter-spacing: 0.03em;
+  vertical-align: 1px;
+}
+.pe-tag.tp { color: var(--pe-tp); }
+.pe-tag.pcp { color: var(--pe-pcp); }
+.pe-tag.dcp { color: var(--pe-dcp); }
+.pe-tag.ep { color: var(--pe-ep); }
+.pe-tag.uly { color: var(--pe-uly); }
+.pe-tag.ring { color: var(--pe-ring); }
+.pe-tag.cfg { color: var(--pe-cfg); }
+.pe-tag.sp { color: var(--pe-sp); }
+.pe-tag.rep { color: var(--pe-dim); }
+
+/* ---------- 时间线 ---------- */
+.pe-tl { position: relative; height: 4.1rem; margin: 0.3rem 0 0.2rem; }
+.pe-tl .track {
+  position: absolute;
+  top: 1.7rem;
+  right: 0;
+  left: 0;
+  display: flex;
+  overflow: hidden;
+  height: 0.85rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.45rem;
+  background: var(--pe-panel2);
+}
+.pe-tl .seg { height: 100%; border-right: 1px solid var(--pe-panel); }
+.pe-tl .flag { position: absolute; top: 0; width: 2px; height: 1.7rem; }
+.pe-tl .flag i {
+  position: absolute;
+  top: -2px;
+  left: -3px;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+}
+.pe-tl .lab {
+  position: absolute;
+  top: 2.8rem;
+  font-size: 0.55rem;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* ---------- 表格 ---------- */
+.pe-tblwrap { overflow-x: auto; }
+.pe table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.68rem;
+}
+.pe th,
+.pe td {
+  padding: 0.36rem 0.48rem;
+  border-bottom: 1px solid var(--pe-line);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pe th {
+  color: var(--pe-dim);
+  font-family: var(--md-code-font);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pe th:first-child,
+.pe td:first-child { font-variant-numeric: normal; text-align: left; }
+.pe td.mono {
+  color: var(--pe-slate);
+  font-family: var(--md-code-font);
+  font-size: 0.6rem;
+  text-align: left;
+}
+.pe tr.sum td { border-top: 2px solid var(--pe-line); border-bottom: 0; font-weight: 700; }
+.pe tr.sec td {
+  padding-top: 0.7rem;
+  color: var(--pe-dim);
+  font-family: var(--md-code-font);
+  font-size: 0.55rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.pe-tabs { display: flex; gap: 0.35rem; margin-bottom: 0.7rem; }
+.pe-tab {
+  padding: 0.28rem 0.8rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.35rem;
+  background: var(--pe-panel2);
+  color: var(--pe-dim);
+  font-size: 0.68rem;
+  cursor: pointer;
+  user-select: none;
+}
+.pe-tab.on { border-color: var(--pe-fg); background: var(--pe-fg); color: var(--pe-panel); }
+
+/* ---------- 条形图 ---------- */
+.pe-bars { display: flex; flex-direction: column; gap: 0.36rem; }
+.pe-bar {
+  display: grid;
+  grid-template-columns: 11rem 1fr 5.2rem;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.63rem;
+}
+.pe-bar .track {
+  overflow: hidden;
+  height: 0.8rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 0.28rem;
+  background: var(--pe-panel2);
+}
+.pe-bar .fill { height: 100%; border-radius: 0.24rem 0 0 0.24rem; }
+.pe-bar .val { color: var(--pe-dim); font-variant-numeric: tabular-nums; text-align: right; }
+.pe-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+
+/* ---------- 说明 ---------- */
+.pe-note { color: var(--pe-dim); font-size: 0.7rem; line-height: 1.85; }
+.pe-note b { color: var(--pe-fg); }
+.pe-note ul { margin: 0.3rem 0 0.7rem; padding-left: 1.2rem; }
+.pe-note li { margin: 0.18rem 0; }
+.pe-pill {
+  display: inline-block;
+  margin-right: 0.35rem;
+  margin-bottom: 0.25rem;
+  padding: 0.08rem 0.48rem;
+  border: 1px solid var(--pe-line);
+  border-radius: 1rem;
+  background: var(--pe-panel2);
+  color: var(--pe-dim);
+  font-family: var(--md-code-font);
+  font-size: 0.58rem;
+}
+.pe-hide { display: none !important; }
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1100px) {
+  .pe-two { grid-template-columns: 1fr; }
+  .pe-stage,
+  .pe-commbox .top { grid-template-columns: 1fr; }
+  .pe-stage .rt,
+  .pe-commbox .top .rt { text-align: left; }
+  .pe-gcards { grid-template-columns: 1fr; }
+  .pe-bar { grid-template-columns: 8rem 1fr 4.6rem; }
+}
+
+</style>
+</head>
+<body data-md-color-scheme="default">
+<button class="themebtn" id="themebtn">◐ theme</button>
+<div class="page"><div id="pe-root"></div></div>
+<script>
+(function () {
+  var b = document.body, k = "pe-scheme";
+  try { var s = localStorage.getItem(k); if (s) b.setAttribute("data-md-color-scheme", s); } catch (e) {}
+  document.getElementById("themebtn").addEventListener("click", function () {
+    var next = b.getAttribute("data-md-color-scheme") === "slate" ? "default" : "slate";
+    b.setAttribute("data-md-color-scheme", next);
+    try { localStorage.setItem(k, next); } catch (e) {}
+  });
+})();
+</script>
+<script>
+/* ==========================================================================
+   Parallelism Explorer — 并行切分可视化 / Parallelism sharding explorer
+   语义对齐 vLLM 与 vLLM-Omni 源码；中英双语；跟随站点明暗主题。
+   Mount point: <div id="pe-root"></div>
+   ========================================================================== */
+(function () {
+  "use strict";
+
+  /* 样式自注入：markdown 里裸写 <link> 会被 Python-Markdown 包进 <p>，
+     所以由脚本按自身 src 推导出同目录的 css 再插入；离线单文件版已内联样式，跳过。 */
+  var SELF_SRC = (function () {
+    if (document.currentScript && document.currentScript.src) return document.currentScript.src;
+    var ss = document.getElementsByTagName("script");
+    for (var i = ss.length - 1; i >= 0; i--) if (ss[i].src && ss[i].src.indexOf("parallelism-explorer") >= 0) return ss[i].src;
+    return "";
+  })();
+  (function injectCss() {
+    if (document.querySelector("[data-pe-style]")) return;
+    if (!SELF_SRC) return;
+    var href = SELF_SRC.replace(/\.js(\?.*)?$/, ".css");
+    var link = document.createElement("link");
+    link.rel = "stylesheet"; link.href = href; link.setAttribute("data-pe-style", "1");
+    (document.head || document.documentElement).appendChild(link);
+  })();
+
+  /* ===================== i18n ===================== */
+  var L = "zh";
+  try { L = localStorage.getItem("pe-lang") || "zh"; } catch (e) { L = "zh"; }
+
+  var STR = {
+    zh: {
+      eyebrow: "PARALLELISM EXPLORER",
+      title_llm: "LLM 单层并行切分图解 · 矩阵怎么切 / 谁算哪块 / 通信发生在哪",
+      title_diff: "Diffusion 单层并行切分图解 · 矩阵怎么切 / 谁算哪块 / 通信发生在哪",
+      lead_llm: "以 Qwen3-32B 为例，交互式拆解一个 decoder layer 在 TP / PCP / DCP / PP / DP / EP 各种组合下的权重分片、激活形状、计算量与通信量。所有切分与通信语义对齐 vLLM 源码。",
+      lead_diff: "以 Qwen-Image（20B MMDiT）为例，交互式拆解一个 transformer block 在 TP / SP(Ulysses×Ring) / PP / DP / EP / CFG-P / VAE-P 各种组合下的行为。语义对齐 vLLM-Omni 源码。",
+      src_llm: "源码依据：",
+      src_diff: "源码依据：",
+      cls_llm: "LLM · 自回归",
+      cls_diff: "Diffusion · 扩散",
+
+      lbl_model: "模型",
+      lbl_tp: "TP · 张量并行",
+      lbl_pcp: "PCP · Prefill 上下文并行",
+      lbl_dcp: "DCP · Decode 上下文并行",
+      lbl_uly: "SP · Ulysses degree",
+      lbl_ring: "SP · Ring degree",
+      lbl_cfg: "CFG-P · 引导分支并行",
+      lbl_vae: "VAE-P · VAE patch 并行",
+      lbl_pp: "PP · 流水线并行",
+      lbl_dp: "DP · 数据并行",
+      lbl_ep: "EP · 专家并行",
+      lbl_self: "观察哪个 rank",
+      ep_off: "关闭", ep_on: "开启",
+      lbl_bs: "Batch（并发请求数）",
+      lbl_sq: "Prefill 新 token / 请求",
+      lbl_sctx: "已有 context 长度",
+      lbl_adt: "激活 dtype",
+      lbl_kdt: "KV cache dtype",
+      lbl_wdt: "权重 dtype",
+      lbl_dcpbk: "DCP 通信后端",
+      lbl_dbs: "Batch（并发图片数）",
+      lbl_imh: "图像高 H (px)",
+      lbl_imw: "图像宽 W (px)",
+      lbl_ltxt: "文本 token 数",
+      lbl_steps: "去噪步数",
+      lbl_docfg: "true CFG（双分支）",
+      docfg_on: "开启 · 2 分支", docfg_off: "关闭 · 1 分支",
+      dcpbk_agrs: "ag_rs（默认）", dcpbk_a2a: "a2a",
+      rank_opt: "rank ",
+
+      sec_scale: "整体规模",
+      sec_pipeline: "⓪ 整体流程 · 各并行维度分别在哪一层生效",
+      sec_pipeline_n: "— CFG-P 每步一次、SP/TP 每层一次、VAE-P 只在最后一次",
+      sec_rank: "Rank 布局与通信组",
+      sec_rank_n_llm: "— 布局顺序 ExternalDP × DP × PP × PCP × TP",
+      sec_rank_n_diff: "— 布局顺序 <code>tp-sp-pp-cfg-dp</code>，<code>world_size = tp × sp × pp × cfg × dp</code>",
+      sec_gemm: "① 权重矩阵怎么切 · GEMM 分块图",
+      sec_gemm_n: "— 实色块 = 当前 rank 持有/计算的部分，斜纹 = 部分和（partial sum，需要 all-reduce）",
+      sec_attn_llm: "② Attention 分数矩阵怎么切 · Query × Key 平面",
+      sec_attn_llm_n: "— 行 = query token，列 = key token；亮色 = 当前 rank 实际计算的区域",
+      sec_attn_diff: "② Attention 怎么切 · 序列 / head 两条路线",
+      sec_attn_diff_n: "— Ulysses 换 head、Ring 转 KV",
+      sec_flow_llm: "③ 单层数据流 · 通信精确发生在哪一步",
+      sec_flow_diff: "③ 单个 MMDiT block 数据流 · 通信精确发生在哪一步",
+      sec_table: "明细表 · 权重分片 / 激活 shape / 计算量 / 通信量",
+      sec_flop: "计算量构成",
+      sec_comm: "通信量构成",
+      sec_sweep: "并行度扫描 · 各维度取 1/2/4/8",
+      sec_notes: "语义说明（源码依据）",
+
+      tab_prefill: "Prefill", tab_decode: "Decode",
+      ok: "✓ 合法", bad: "✕ 非法组合", warn: "! 注意",
+      ok_llm: "world_size = PP×TP×PCP = ",
+      ok_diff: "world_size = TP×SP×PP×CFG×DP = ",
+
+      kpi_gpus: "GPU 总数",
+      kpi_layers: "每 rank 层数",
+      kpi_weight: "每 rank 权重",
+      kpi_kv: "每 rank KV cache",
+      kpi_pflop: "Prefill 计算/层",
+      kpi_pcomm: "Prefill 通信/层",
+      kpi_dflop: "Decode 计算/层",
+      kpi_dcomm: "Decode 通信/层",
+      kpi_sp: "SP 拆解",
+      kpi_imgtok: "image token 数",
+      kpi_bflop: "单 block 计算",
+      kpi_bcomm: "单 block 通信",
+      kpi_stepcomm: "每步额外通信",
+      kpi_totflop: "整图计算 / rank",
+      kpi_totcomm: "整图通信 / rank",
+      kpi_latent: "latent 大小",
+      kpi_nokv: "KV cache",
+      kpi_nokv_v: "无",
+      n_layers_of: function (a, b) { return a + " 层 / PP=" + b; },
+      n_perlayer: function (x) { return "单层 " + x; },
+      n_localtok: function (x) { return "本地 " + x + " tokens"; },
+      n_flopbyte: function (x) { return x + " FLOP/Byte"; },
+      n_patchtok: function (a, b, c) { return a + "×" + b + " patch｜每 rank " + c; },
+      n_wsplit: function (a, b) { return "复制 " + a + " + 切分 " + b; },
+      n_blocks_of: function (a, b) { return a + " blocks / PP=" + b; },
+      n_stepsblocks: function (a, b) { return a + " 步 × " + b + " block"; },
+      n_withvae: function (x) { return "含 VAE " + x; },
+      n_branches: function (a, b) { return a + "×" + b + "×" + "…"; },
+      n_spdecomp: "ulysses × ring = SP ",
+      n_gathers: "SP gather + CFG gather",
+      n_recompute: "扩散模型每步全量重算",
+      n_kvdcp: function (x, d) { return "单层 " + x + "｜÷DCP=" + d; },
+
+      lg_self: "当前观察的 rank",
+      lg_tp: "同 TP 组", lg_dcp: "同 DCP 组", lg_pcp: "同 PCP 组",
+      lg_sp: "同 SP 组", lg_uly: "同 Ulysses 子组", lg_ring: "同 Ring 子组", lg_cfg: "同 CFG 组",
+
+      th_op: "算子", th_wshard: "权重分片", th_act: "激活 shape",
+      th_pflop: "Prefill 计算", th_dflop: "Decode 计算",
+      th_pcomm: "Prefill 通信", th_dcomm: "Decode 通信",
+      th_flop: "计算量 / rank", th_comm: "通信量 / rank",
+      th_dim: "维度", th_valid: "合法性",
+      th_bflop: "单 block 计算", th_bcomm: "单 block 通信",
+      th_tflop: "整图计算", th_tcomm: "整图通信",
+      sw_foot: "只变动该行的维度、其余维度保持当前值；✕ 表示该取值与其它维度组合非法。",
+      no_comm: "当前配置全部并行度为 1，无集合通信。",
+
+      before: "通信前（每 rank 本地持有）", after: "通信后",
+      partial_sum: "部分和", partial_seg: "各段部分值", full_sum: "完整和",
+      by_dest: "按目的地分块", from_ranks: "来自各 rank",
+      rotate_n: function (n) { return "轮转 " + n + " 次"; },
+      only_first: function (a, b) { return "（仅画出前 " + a + " 个 rank，实际 " + b + " 个）"; },
+      act_x: "激活 X", weight_w: "权重 W", out_y: "输出 Y",
+      no_comm_short: "无通信", indep: "各 rank 独立",
+      allreduce_over: function (p) { return "跨 " + p + " 个 rank"; },
+      replicated: "复制",
+      per_rank: " / rank",
+    },
+    en: {
+      eyebrow: "PARALLELISM EXPLORER",
+      title_llm: "Sharding a single LLM layer — how matrices split, who computes what, where communication happens",
+      title_diff: "Sharding a single diffusion block — how matrices split, who computes what, where communication happens",
+      lead_llm: "Using Qwen3-32B as the worked example, this tool takes one decoder layer apart under every combination of TP / PCP / DCP / PP / DP / EP and shows the weight shards, activation shapes, FLOPs and communication volume. Every sharding and collective follows the vLLM source.",
+      lead_diff: "Using Qwen-Image (a 20B MMDiT) as the worked example, this tool takes one transformer block apart under TP / SP(Ulysses×Ring) / PP / DP / EP / CFG-P / VAE-P. Semantics follow the vLLM-Omni source.",
+      src_llm: "Source of truth: ",
+      src_diff: "Source of truth: ",
+      cls_llm: "LLM · autoregressive",
+      cls_diff: "Diffusion",
+
+      lbl_model: "Model",
+      lbl_tp: "TP · tensor parallel",
+      lbl_pcp: "PCP · prefill context parallel",
+      lbl_dcp: "DCP · decode context parallel",
+      lbl_uly: "SP · Ulysses degree",
+      lbl_ring: "SP · Ring degree",
+      lbl_cfg: "CFG-P · guidance-branch parallel",
+      lbl_vae: "VAE-P · VAE patch parallel",
+      lbl_pp: "PP · pipeline parallel",
+      lbl_dp: "DP · data parallel",
+      lbl_ep: "EP · expert parallel",
+      lbl_self: "Inspect which rank",
+      ep_off: "off", ep_on: "on",
+      lbl_bs: "Batch (concurrent requests)",
+      lbl_sq: "New prefill tokens / request",
+      lbl_sctx: "Existing context length",
+      lbl_adt: "Activation dtype",
+      lbl_kdt: "KV cache dtype",
+      lbl_wdt: "Weight dtype",
+      lbl_dcpbk: "DCP comm backend",
+      lbl_dbs: "Batch (concurrent images)",
+      lbl_imh: "Image height H (px)",
+      lbl_imw: "Image width W (px)",
+      lbl_ltxt: "Text tokens",
+      lbl_steps: "Denoising steps",
+      lbl_docfg: "true CFG (two branches)",
+      docfg_on: "on · 2 branches", docfg_off: "off · 1 branch",
+      dcpbk_agrs: "ag_rs (default)", dcpbk_a2a: "a2a",
+      rank_opt: "rank ",
+
+      sec_scale: "Overall scale",
+      sec_pipeline: "⓪ End-to-end flow — where each parallel dimension actually kicks in",
+      sec_pipeline_n: "— CFG-P once per step, SP/TP once per layer, VAE-P once per generation",
+      sec_rank: "Rank layout and communication groups",
+      sec_rank_n_llm: "— layout order ExternalDP × DP × PP × PCP × TP",
+      sec_rank_n_diff: "— layout order <code>tp-sp-pp-cfg-dp</code>, <code>world_size = tp × sp × pp × cfg × dp</code>",
+      sec_gemm: "① How the weight matrices split — GEMM block diagrams",
+      sec_gemm_n: "— solid blocks are what this rank holds or computes; hatching marks a partial sum awaiting all-reduce",
+      sec_attn_llm: "② How the attention score matrix splits — the query × key plane",
+      sec_attn_llm_n: "— rows are query tokens, columns are key tokens; bright cells are what this rank actually computes",
+      sec_attn_diff: "② How attention splits — the sequence route and the head route",
+      sec_attn_diff_n: "— Ulysses trades sequence for heads, Ring rotates the KV",
+      sec_flow_llm: "③ Layer dataflow — exactly where each collective fires",
+      sec_flow_diff: "③ MMDiT block dataflow — exactly where each collective fires",
+      sec_table: "Breakdown — weight shard / activation shape / FLOPs / bytes",
+      sec_flop: "Where the FLOPs go",
+      sec_comm: "Where the bytes go",
+      sec_sweep: "Sweep — each dimension at 1/2/4/8",
+      sec_notes: "Notes, with source references",
+
+      tab_prefill: "Prefill", tab_decode: "Decode",
+      ok: "✓ valid", bad: "✕ invalid combination", warn: "! note",
+      ok_llm: "world_size = PP×TP×PCP = ",
+      ok_diff: "world_size = TP×SP×PP×CFG×DP = ",
+
+      kpi_gpus: "Total GPUs",
+      kpi_layers: "Layers per rank",
+      kpi_weight: "Weights per rank",
+      kpi_kv: "KV cache per rank",
+      kpi_pflop: "Prefill FLOPs/layer",
+      kpi_pcomm: "Prefill bytes/layer",
+      kpi_dflop: "Decode FLOPs/layer",
+      kpi_dcomm: "Decode bytes/layer",
+      kpi_sp: "SP factorisation",
+      kpi_imgtok: "Image tokens",
+      kpi_bflop: "FLOPs per block",
+      kpi_bcomm: "Bytes per block",
+      kpi_stepcomm: "Extra bytes per step",
+      kpi_totflop: "FLOPs per image / rank",
+      kpi_totcomm: "Bytes per image / rank",
+      kpi_latent: "Latent size",
+      kpi_nokv: "KV cache",
+      kpi_nokv_v: "none",
+      n_layers_of: function (a, b) { return a + " layers / PP=" + b; },
+      n_perlayer: function (x) { return x + " per layer"; },
+      n_localtok: function (x) { return x + " local tokens"; },
+      n_flopbyte: function (x) { return x + " FLOP/byte"; },
+      n_patchtok: function (a, b, c) { return a + "×" + b + " patches｜" + c + " per rank"; },
+      n_wsplit: function (a, b) { return "replicated " + a + " + sharded " + b; },
+      n_blocks_of: function (a, b) { return a + " blocks / PP=" + b; },
+      n_stepsblocks: function (a, b) { return a + " steps × " + b + " blocks"; },
+      n_withvae: function (x) { return "incl. VAE " + x; },
+      n_spdecomp: "ulysses × ring = SP ",
+      n_gathers: "SP gather + CFG gather",
+      n_recompute: "diffusion recomputes everything each step",
+      n_kvdcp: function (x, d) { return x + " per layer｜÷DCP=" + d; },
+
+      lg_self: "the rank being inspected",
+      lg_tp: "same TP group", lg_dcp: "same DCP group", lg_pcp: "same PCP group",
+      lg_sp: "same SP group", lg_uly: "same Ulysses subgroup", lg_ring: "same Ring subgroup", lg_cfg: "same CFG group",
+
+      th_op: "Operator", th_wshard: "Weight shard", th_act: "Activation shape",
+      th_pflop: "Prefill FLOPs", th_dflop: "Decode FLOPs",
+      th_pcomm: "Prefill bytes", th_dcomm: "Decode bytes",
+      th_flop: "FLOPs / rank", th_comm: "Bytes / rank",
+      th_dim: "Dimension", th_valid: "Valid",
+      th_bflop: "FLOPs / block", th_bcomm: "Bytes / block",
+      th_tflop: "FLOPs / image", th_tcomm: "Bytes / image",
+      sw_foot: "Only the dimension on that row changes; everything else stays at the current setting. ✕ marks a value that is illegal in combination with the others.",
+      no_comm: "Every parallel degree is 1, so there is no collective communication.",
+
+      before: "before (held locally by each rank)", after: "after",
+      partial_sum: "partial sum", partial_seg: "partial values", full_sum: "full sum",
+      by_dest: "chunked by destination", from_ranks: "one chunk from each rank",
+      rotate_n: function (n) { return n + " rotations"; },
+      only_first: function (a, b) { return "(showing the first " + a + " of " + b + " ranks)"; },
+      act_x: "activation X", weight_w: "weight W", out_y: "output Y",
+      no_comm_short: "no communication", indep: "ranks are independent",
+      allreduce_over: function (p) { return "across " + p + " ranks"; },
+      replicated: "replicated",
+      per_rank: " / rank",
+    }
+  };
+
+  function t(k) {
+    var v = STR[L][k];
+    if (v === undefined) v = STR.zh[k];
+    if (typeof v === "function") return v.apply(null, Array.prototype.slice.call(arguments, 1));
+    return v;
+  }
+  var zhen = function (zh, en) { return L === "en" ? en : zh; };
+
+  /* ===================== 模型库 ===================== */
+  var MODELS_LLM = {
+    "Qwen3-32B": { h: 5120, H: 64, Hkv: 8, D: 128, I: 25600, L: 64, V: 151936, E: 0, K: 0, MI: 0, qknorm: true,
+      note: { zh: "dense · HF config.json 实测值", en: "dense · values read from the HF config.json" } },
+    "Qwen3-30B-A3B": { h: 2048, H: 32, Hkv: 4, D: 128, I: 0, L: 48, V: 151936, E: 128, K: 8, MI: 768, qknorm: true,
+      note: { zh: "MoE · 每层 128 专家 top-8", en: "MoE · 128 experts per layer, top-8 routing" } },
+    "__custom__": { custom: true, h: 5120, H: 64, Hkv: 8, D: 128, I: 25600, L: 64, V: 151936, E: 0, K: 0, MI: 0, qknorm: true,
+      note: { zh: "手动填写超参，用于接入新模型", en: "hand-entered hyper-parameters for a new model" } }
+  };
+  var MODELS_DIFF = {
+    "Qwen-Image": { d: 3072, H: 24, D: 128, mult: 4, L: 60, inCh: 64, patch: 2, vaeScale: 8, zDim: 16, txtDim: 3584, E: 0,
+      note: { zh: "MMDiT 双流 · HF transformer/config.json 实测值 · 约 20B 参数", en: "dual-stream MMDiT · values from HF transformer/config.json · ~20B parameters" } },
+    "__custom__": { custom: true, d: 3072, H: 24, D: 128, mult: 4, L: 60, inCh: 64, patch: 2, vaeScale: 8, zDim: 16, txtDim: 3584, E: 0,
+      note: { zh: "手动填写超参，用于接入新的 Diffusion 模型", en: "hand-entered hyper-parameters for a new diffusion model" } }
+  };
+  var CUSTOM_LABEL = { zh: "自定义…", en: "Custom…" };
+  function modelLabel(k) { return k === "__custom__" ? CUSTOM_LABEL[L] : k; }
+  function modelNote(m) { return m && m.note ? (m.note[L] || m.note.zh) : ""; }
+
+  var DIMS = [1, 2, 4, 8];
+  var HUE = { tp: 217, pcp: 32, dcp: 174, pp: 262, dp: 330, ep: 45, sp: 190, uly: 160, ring: 200, cfg: 292, vae: 25 };
+
+  /* ===================== 工具 ===================== */
+  var root = null;
+  function $(id) { return root.querySelector("#pe-" + id); }
+  function $$(sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
+  function isDark() {
+    var s = document.body.getAttribute("data-md-color-scheme");
+    return s === "slate";
+  }
+  function fmtF(f) {
+    if (!(f > 0)) return "0";
+    if (f >= 1e18) return (f / 1e18).toFixed(2) + " EFLOP";
+    if (f >= 1e15) return (f / 1e15).toFixed(2) + " PFLOP";
+    if (f >= 1e12) return (f / 1e12).toFixed(2) + " TFLOP";
+    if (f >= 1e9) return (f / 1e9).toFixed(2) + " GFLOP";
+    if (f >= 1e6) return (f / 1e6).toFixed(2) + " MFLOP";
+    return f.toFixed(0) + " FLOP";
+  }
+  function fmtB(b) {
+    if (!(b > 0)) return "0";
+    if (b >= 1099511627776) return (b / 1099511627776).toFixed(2) + " TiB";
+    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " GiB";
+    if (b >= 1048576) return (b / 1048576).toFixed(2) + " MiB";
+    if (b >= 1024) return (b / 1024).toFixed(1) + " KiB";
+    return b.toFixed(0) + " B";
+  }
+  function fmtN(n) {
+    if (!(n > 0)) return "0";
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+    return String(Math.round(n));
+  }
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  var AR = function (n, P, b) { return P <= 1 ? 0 : 2 * (P - 1) / P * n * b; };
+  var AG = function (n, P, b) { return P <= 1 ? 0 : (P - 1) * n * b; };
+  var RS = function (n, P, b) { return P <= 1 ? 0 : (P - 1) * n * b; };
+  var A2A = function (n, P, b) { return P <= 1 ? 0 : (P - 1) / P * n * b; };
+  var P2P = function (n, steps, b) { return steps <= 0 ? 0 : steps * n * b; };
+
+  function rc(dim, i, P, self) {
+    var hu = HUE[dim] !== undefined ? HUE[dim] : 217;
+    if (i === self) return isDark() ? "hsl(" + hu + " 76% 60%)" : "hsl(" + hu + " 68% 48%)";
+    var f = P <= 1 ? 0 : i / Math.max(1, P - 1);
+    return isDark()
+      ? "hsl(" + hu + " 28% " + (22 + 15 * f) + "%)"
+      : "hsl(" + hu + " 40% " + (89 - 13 * f) + "%)";
+  }
+  function rstroke(i, self) { return i === self ? "var(--pe-svg-fg)" : "var(--pe-panel2)"; }
+  function onShard(i, self) { return i === self ? "var(--pe-on-shard)" : "var(--pe-on-shard-dim)"; }
+
+  /* ===================== SVG 基础件 ===================== */
+  var SHARED_DEFS =
+    '<svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs>' +
+    '<pattern id="pe-hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">' +
+    '<rect width="6" height="6" fill="var(--pe-hatch-bg)"/>' +
+    '<line x1="0" y1="0" x2="0" y2="6" stroke="var(--pe-hatch-line)" stroke-width="2.4"/></pattern>' +
+    '<marker id="pe-ah" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">' +
+    '<path d="M0,0 L7,3.5 L0,7 z" fill="var(--pe-svg-dim)"/></marker>' +
+    '<marker id="pe-ahw" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">' +
+    '<path d="M0,0 L7,3.5 L0,7 z" fill="var(--pe-warn)"/></marker>' +
+    "</defs></svg>";
+
+  function txt(x, y, s, o) {
+    o = o || {};
+    var sz = o.sz || 10, fill = o.fill || "var(--pe-svg-dim)", anchor = o.anchor || "middle",
+      w = o.w || 400, rot = o.rot || 0;
+    return '<text x="' + x + '" y="' + y + '" font-size="' + sz + '" fill="' + fill +
+      '" text-anchor="' + anchor + '" font-weight="' + w +
+      '" font-family="var(--md-code-font)"' +
+      (rot ? ' transform="rotate(' + rot + " " + x + " " + y + ')"' : "") + ">" + esc(s) + "</text>";
+  }
+  function mat(x, y, w, h, o) {
+    o = o || {};
+    var dir = o.dir || null, P = o.P || 1, self = o.self === undefined ? 0 : o.self,
+      dim = o.dim || "tp", fill = o.fill || "shard", label = o.label || "", cap = o.cap || "";
+    var s = "";
+    if (fill === "partial") {
+      s += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#pe-hatch)" stroke="var(--pe-svg-line)"/>';
+    } else if (!dir || P <= 1) {
+      s += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' +
+        (fill === "full" ? "var(--pe-svg-neutral)" : rc(dim, self, 1, self)) + '" stroke="var(--pe-svg-line)"/>';
+    } else {
+      for (var i = 0; i < P; i++) {
+        var bx = dir === "v" ? x + i * w / P : x, by = dir === "v" ? y : y + i * h / P;
+        var bw = dir === "v" ? w / P : w, bh = dir === "v" ? h : h / P;
+        s += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh + '" fill="' + rc(dim, i, P, self) +
+          '" stroke="' + rstroke(i, self) + '" stroke-width="' + (i === self ? 1.6 : 0.7) + '"/>';
+        if ((dir === "v" ? bw : bh) >= 15 && P <= 8)
+          s += txt(bx + bw / 2, by + bh / 2 + 3.4, "r" + i, { sz: 9, fill: onShard(i, self), w: 700 });
+      }
+    }
+    if (label) s += txt(x + w / 2, y - 7, label, { sz: 10, fill: "var(--pe-svg-fg)", w: 600 });
+    if (cap) s += txt(x + w / 2, y + h + 13, cap, { sz: 9.5, fill: "var(--pe-svg-dim)" });
+    return s;
+  }
+  function sym(x, y, s) { return txt(x, y, s, { sz: 17, fill: "var(--pe-svg-faint)", w: 700 }); }
+
+  function svgGemm(o) {
+    var mode = o.mode, P = o.P, self = o.self, dim = o.dim, Klab = o.Klab, Mlab = o.Mlab;
+    var W = 640, H = 180, ay = 44, ah = 64, by = 30, bh = 96, cy = 44, ch = 64,
+      ax = 54, aw = 88, bx = 196, bw = 132, cx = 396, cw = 132;
+    var isCol = mode === "col", isRow = mode === "row";
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    s += mat(ax, ay, aw, ah, { dir: isRow ? "v" : null, P: P, self: self, dim: dim, fill: isRow ? "shard" : "full",
+      label: t("act_x"), cap: isRow ? "[N, " + Klab + "/" + P + "]" : "[N, " + Klab + "]" });
+    s += txt(ax - 9, ay + ah / 2 + 3, "N", { sz: 10, anchor: "end", fill: "var(--pe-svg-fg)", w: 600 });
+    s += sym(bx - 28, by + bh / 2 + 6, "×");
+    s += mat(bx, by, bw, bh, { dir: isCol ? "v" : (isRow ? "h" : null), P: P, self: self, dim: dim, label: t("weight_w"),
+      cap: isCol ? "[" + Klab + ", " + Mlab + "/" + P + "]" : (isRow ? "[" + Klab + "/" + P + ", " + Mlab + "]" : "[" + Klab + ", " + Mlab + "]") });
+    s += sym(cx - 28, cy + ch / 2 + 6, "=");
+    s += mat(cx, cy, cw, ch, { dir: isCol ? "v" : null, P: P, self: self, dim: dim, fill: isRow ? "partial" : "shard",
+      label: t("out_y"), cap: isCol ? "[N, " + Mlab + "/" + P + "]" : "[N, " + Mlab + "]" });
+    if (isRow) {
+      s += txt(cx + cw / 2, cy + ch / 2 + 4, t("partial_sum"), { sz: 10, fill: "var(--pe-svg-fg)", w: 700 });
+      s += '<path d="M' + (cx + cw + 10) + "," + (cy + ch / 2) + " L" + (W - 96) + "," + (cy + ch / 2) +
+        '" stroke="var(--pe-warn)" stroke-width="1.6" marker-end="url(#pe-ahw)" stroke-dasharray="4 3"/>';
+      s += txt(W - 56, cy + ch / 2 - 8, "all-reduce", { sz: 10, fill: "var(--pe-warn)", w: 700 });
+      s += txt(W - 56, cy + ch / 2 + 8, t("allreduce_over", P), { sz: 9, fill: "var(--pe-svg-dim)" });
+    } else if (isCol) {
+      s += txt(W - 56, cy + ch / 2 - 6, t("no_comm_short"), { sz: 11, fill: "var(--pe-ok)", w: 700 });
+      s += txt(W - 56, cy + ch / 2 + 9, t("indep"), { sz: 9, fill: "var(--pe-svg-dim)" });
+    } else {
+      s += txt(W - 56, cy + ch / 2 + 2, o.noteRight || t("replicated"), { sz: 10, fill: "var(--pe-svg-dim)" });
+    }
+    return s + "</svg>";
+  }
+
+  function svgComm(o) {
+    var kind = o.kind, P = o.P, self = o.self, dim = o.dim;
+    var Pd = Math.min(P, 8), W = 720, H = 176, x0 = 42, x1 = W - 42, span = x1 - x0,
+      colW = span / Pd, slab = Math.min(colW - 16, 92), yTop = 44, yBot = 118, hh = 28;
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    s += txt(x0, 18, t("before"), { sz: 10, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(x0, 168, t("after"), { sz: 10, anchor: "start", fill: "var(--pe-svg-dim)" });
+    var cxOf = function (i) { return x0 + colW * i + colW / 2; };
+    for (var i = 0; i < Pd; i++) {
+      var cx = cxOf(i), lx = cx - slab / 2, j;
+      s += txt(cx, 34, "rank " + i, { sz: 9.5, fill: i === self ? "var(--pe-svg-fg)" : "var(--pe-svg-faint)", w: i === self ? 700 : 400 });
+      if (kind === "ag" || kind === "p2p" || kind === "ring") {
+        s += '<rect x="' + (cx - slab / (2 * Pd)) + '" y="' + yTop + '" width="' + (slab / Pd) + '" height="' + hh +
+          '" fill="' + rc(dim, i, Pd, self) + '" stroke="' + rstroke(i, self) + '" stroke-width="' + (i === self ? 1.6 : 0.7) + '"/>';
+      } else if (kind === "rs" || kind === "ar") {
+        for (j = 0; j < Pd; j++)
+          s += '<rect x="' + (lx + j * slab / Pd) + '" y="' + yTop + '" width="' + (slab / Pd) + '" height="' + hh +
+            '" fill="url(#pe-hatch)" stroke="var(--pe-svg-line)" stroke-width=".6"/>';
+        s += txt(cx, yTop + hh / 2 + 3.5, kind === "ar" ? t("partial_sum") : t("partial_seg"), { sz: 8.5, fill: "var(--pe-svg-fg)", w: 600 });
+      } else if (kind === "a2a") {
+        for (j = 0; j < Pd; j++)
+          s += '<rect x="' + (lx + j * slab / Pd) + '" y="' + yTop + '" width="' + (slab / Pd) + '" height="' + hh +
+            '" fill="' + rc(dim, j, Pd, -1) + '" stroke="var(--pe-panel2)" stroke-width=".6"/>';
+        s += txt(cx, yTop - 4, t("by_dest"), { sz: 8, fill: "var(--pe-svg-faint)" });
+      }
+      if (kind === "ag") {
+        for (j = 0; j < Pd; j++)
+          s += '<rect x="' + (lx + j * slab / Pd) + '" y="' + yBot + '" width="' + (slab / Pd) + '" height="' + hh +
+            '" fill="' + rc(dim, j, Pd, -1) + '" stroke="var(--pe-panel2)" stroke-width=".6"/>';
+      } else if (kind === "rs") {
+        s += '<rect x="' + (cx - slab / (2 * Pd)) + '" y="' + yBot + '" width="' + (slab / Pd) + '" height="' + hh +
+          '" fill="' + rc(dim, i, Pd, self) + '" stroke="' + rstroke(i, self) + '" stroke-width="' + (i === self ? 1.6 : 0.7) + '"/>';
+      } else if (kind === "ar" || kind === "p2p" || kind === "ring") {
+        s += '<rect x="' + lx + '" y="' + yBot + '" width="' + slab + '" height="' + hh + '" fill="' + rc(dim, i, Pd, self) +
+          '" stroke="' + rstroke(i, self) + '" stroke-width="' + (i === self ? 1.6 : 0.7) + '"/>';
+        if (kind === "ar") s += txt(cx, yBot + hh / 2 + 3.5, t("full_sum"), { sz: 8.5, fill: onShard(i, self), w: 700 });
+        if (kind === "ring") s += txt(cx, yBot + hh / 2 + 3.5, t("rotate_n", P - 1), { sz: 8, fill: onShard(i, self), w: 700 });
+      } else if (kind === "a2a") {
+        for (j = 0; j < Pd; j++)
+          s += '<rect x="' + (lx + j * slab / Pd) + '" y="' + yBot + '" width="' + (slab / Pd) + '" height="' + hh +
+            '" fill="' + rc(dim, i, Pd, self) + '" opacity="' + (0.45 + 0.55 * (j === i ? 1 : 0)) +
+            '" stroke="var(--pe-panel2)" stroke-width=".6"/>';
+        s += txt(cx, yBot + hh + 11, t("from_ranks"), { sz: 8, fill: "var(--pe-svg-faint)" });
+      }
+      if (kind === "ag" || kind === "a2a") {
+        for (j = 0; j < Pd; j++) if (j !== i)
+          s += '<path d="M' + cx + "," + (yTop + hh + 2) + " C" + cx + "," + (yTop + hh + 18) + " " +
+            cxOf(j) + "," + (yBot - 18) + " " + cxOf(j) + "," + (yBot - 2) + '" fill="none" stroke="' + rc(dim, i, Pd, self) +
+            '" stroke-width="' + (i === self ? 1.5 : 0.6) + '" opacity="' + (i === self ? 0.95 : 0.35) +
+            '" marker-end="' + (i === self ? "url(#pe-ah)" : "") + '"/>';
+        s += '<path d="M' + cx + "," + (yTop + hh + 2) + " L" + cx + "," + (yBot - 2) +
+          '" stroke="var(--pe-svg-line)" stroke-width=".8" stroke-dasharray="3 3"/>';
+      } else if (kind === "rs" || kind === "ar") {
+        for (j = 0; j < Pd; j++) if (j !== i)
+          s += '<path d="M' + cxOf(j) + "," + (yTop + hh + 2) + " C" + cxOf(j) + "," + (yTop + hh + 18) + " " +
+            cx + "," + (yBot - 18) + " " + cx + "," + (yBot - 2) + '" fill="none" stroke="' + rc(dim, j, Pd, self) +
+            '" stroke-width=".6" opacity=".3"/>';
+        s += '<path d="M' + cx + "," + (yTop + hh + 2) + " L" + cx + "," + (yBot - 2) + '" stroke="' +
+          (i === self ? rc(dim, i, Pd, self) : "var(--pe-svg-line)") + '" stroke-width="' + (i === self ? 1.5 : 0.8) +
+          '" marker-end="' + (i === self ? "url(#pe-ah)" : "") + '"/>';
+        if (i === self) s += txt(cx + 16, (yTop + hh + yBot) / 2 + 4, "⊕", { sz: 14, fill: "var(--pe-warn)", w: 700 });
+      } else if ((kind === "p2p" || kind === "ring") && i < Pd - 1) {
+        s += '<path d="M' + (cx + slab / 2 + 4) + "," + (yTop + hh / 2) + " L" + (cxOf(i + 1) - slab / 2 - 6) + "," + (yTop + hh / 2) +
+          '" stroke="' + (kind === "ring" ? "var(--pe-ring)" : "var(--pe-pp)") + '" stroke-width="1.4" marker-end="url(#pe-ah)"/>';
+      }
+    }
+    if (kind === "ring" && Pd > 1)
+      s += '<path d="M' + (cxOf(Pd - 1) + slab / 2 + 4) + "," + (yTop - 8) + " C" + cxOf(Pd - 1) + "," + (yTop - 30) + " " +
+        cxOf(0) + "," + (yTop - 30) + " " + (cxOf(0) - slab / 2 - 4) + "," + (yTop - 8) +
+        '" fill="none" stroke="var(--pe-ring)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#pe-ah)"/>';
+    if (P > Pd) s += txt(W / 2, H - 4, t("only_first", Pd, P), { sz: 9, fill: "var(--pe-svg-faint)" });
+    return s + "</svg>";
+  }
+
+  /* ===================== 读取配置 ===================== */
+  var CLS = "llm", PHASE = "prefill";
+
+  function readCfg() {
+    var isD = CLS === "diffusion";
+    var reg = isD ? MODELS_DIFF : MODELS_LLM;
+    var name = $("model").value;
+    var base = reg[name] || reg[Object.keys(reg)[0]];
+    var m = {}; for (var k in base) m[k] = base[k];
+    if (base.custom) {
+      if (isD) {
+        m.d = +$("d_d").value; m.H = +$("d_H").value; m.D = +$("d_D").value; m.mult = +$("d_mult").value;
+        m.L = +$("d_L").value; m.inCh = +$("d_in").value; m.patch = +$("d_ps").value;
+        m.vaeScale = +$("d_vs").value; m.zDim = +$("d_z").value;
+      } else {
+        m.h = +$("c_h").value; m.H = +$("c_H").value; m.Hkv = +$("c_Hkv").value; m.D = +$("c_D").value;
+        m.I = +$("c_I").value; m.L = +$("c_L").value; m.E = +$("c_E").value; m.K = +$("c_K").value; m.MI = +$("c_MI").value;
+      }
+    }
+    var tp = +$("tp").value, pp = +$("pp").value, dp = +$("dp").value;
+    var c = { cls: CLS, name: name, m: m, tp: tp, pp: pp, dp: dp, ep: $("ep").value === "1",
+      adt: +$("adt").value, wdt: +$("wdt").value };
+    if (isD) {
+      c.uly = +$("uly").value; c.ring = +$("ring").value; c.sp = c.uly * c.ring;
+      c.cfg = +$("cfg").value; c.vae = +$("vae").value;
+      c.B = Math.max(1, +$("dbs").value || 1);
+      c.imh = Math.max(16, +$("imh").value || 16); c.imw = Math.max(16, +$("imw").value || 16);
+      c.Ltxt = Math.max(1, +$("ltxt").value || 1); c.steps = Math.max(1, +$("steps").value || 1);
+      c.doCfg = $("docfg").value === "1";
+      c.world = tp * c.sp * pp * c.cfg * dp;
+    } else {
+      c.pcp = +$("pcp").value; c.dcp = +$("dcp").value; c.kdt = +$("kdt").value; c.dcpbk = $("dcpbk").value;
+      c.B = Math.max(1, +$("bs").value || 1); c.Sq = Math.max(1, +$("sq").value || 1);
+      c.Sctx = Math.max(0, +$("sctx").value || 0);
+      c.world = pp * tp * c.pcp;
+    }
+    c.self = Math.min(Math.max(0, +$("self").value || 0), c.world - 1);
+    return c;
+  }
+
+  /* ===================== 校验 ===================== */
+  function validate(c) { return c.cls === "diffusion" ? validateDiff(c) : validateLLM(c); }
+
+  function validateLLM(c) {
+    var a = [], m = c.m, tp = c.tp, pcp = c.pcp, dcp = c.dcp;
+    if (m.H % tp !== 0) a.push(["err", zhen(
+      "num_attention_heads=" + m.H + " 不能被 TP=" + tp + " 整除 —— <code>qwen3.py: assert total_num_heads % tp_size == 0</code>",
+      "num_attention_heads=" + m.H + " is not divisible by TP=" + tp + " — <code>qwen3.py: assert total_num_heads % tp_size == 0</code>")]);
+    if (m.E === 0 && m.I % tp !== 0) a.push(["err", zhen(
+      "intermediate_size=" + m.I + " 不能被 TP=" + tp + " 整除",
+      "intermediate_size=" + m.I + " is not divisible by TP=" + tp)]);
+    if (pcp > 1 && c.dp > 1) a.push(["err", zhen(
+      'PCP 尚不支持数据并行 —— <code>parallel.py: "PCP does not support data parallelism yet."</code>',
+      'PCP does not support data parallelism yet — <code>parallel.py: "PCP does not support data parallelism yet."</code>')]);
+    if (pcp === 1) {
+      if (tp % dcp !== 0) a.push(["err", zhen(
+        "PCP=1 时 DCP 复用 TP ranks，要求 <code>tp_size % dcp_size == 0</code>，当前 TP=" + tp + ", DCP=" + dcp,
+        "With PCP=1, DCP reuses the TP ranks and requires <code>tp_size % dcp_size == 0</code>; got TP=" + tp + ", DCP=" + dcp)]);
+    } else {
+      var ok = [1, pcp, tp * pcp].filter(function (v, i, arr) { return arr.indexOf(v) === i; }).sort(function (x, y) { return x - y; });
+      if (ok.indexOf(dcp) < 0) a.push(["err", zhen(
+        "PCP&gt;1 时 DCP 只能取 <code>{1, PCP, TP×PCP}</code> = {" + ok.join(", ") + "}，当前 DCP=" + dcp,
+        "With PCP&gt;1, DCP must be one of <code>{1, PCP, TP×PCP}</code> = {" + ok.join(", ") + "}; got DCP=" + dcp)]);
+    }
+    if (c.ep && m.E === 0) a.push(["warn", zhen(
+      "当前模型是 dense 结构，EP 不生效", "This model is dense, so EP has no effect")]);
+    if (c.ep && m.E > 0 && m.E % (tp * pcp * c.dp) !== 0) a.push(["err", zhen(
+      "num_experts=" + m.E + " 不能被 ep_size=TP×PCP×DP=" + (tp * pcp * c.dp) + " 整除",
+      "num_experts=" + m.E + " is not divisible by ep_size=TP×PCP×DP=" + (tp * pcp * c.dp))]);
+    if (m.Hkv < tp) a.push(["warn", zhen(
+      "num_key_value_heads=" + m.Hkv + " &lt; TP=" + tp + "：KV heads 被<b>复制</b> " + (tp / m.Hkv) + " 份，KV cache 不再随 TP 下降",
+      "num_key_value_heads=" + m.Hkv + " &lt; TP=" + tp + ": the KV heads are <b>replicated</b> " + (tp / m.Hkv) + "×, so the KV cache stops shrinking as TP grows")]);
+    if (pcp > 1) a.push(["warn", zhen(
+      'PCP 下 <b>decode 请求是被复制的</b>（<code>pcp_manager.py:225 "decodes are replicated"</code>），只有叠加 DCP 才能把复制的 Q 用到不同 KV 分片上',
+      'Under PCP the <b>decode requests are replicated</b> (<code>pcp_manager.py:225 "decodes are replicated"</code>). Only stacking DCP on top puts those duplicated queries to work against different KV shards.')]);
+    return a;
+  }
+
+  function validateDiff(c) {
+    var a = [], m = c.m, tp = c.tp, uly = c.uly, sp = c.sp;
+    var grid = m.vaeScale * m.patch, ff = m.d * m.mult;
+    if (m.H % tp !== 0) a.push(["err", zhen(
+      "num_attention_heads=" + m.H + " 不能被 TP=" + tp + " 整除",
+      "num_attention_heads=" + m.H + " is not divisible by TP=" + tp)]);
+    if (ff % tp !== 0) a.push(["err", zhen(
+      "FeedForward inner_dim=" + ff + " 不能被 TP=" + tp + " 整除",
+      "FeedForward inner_dim=" + ff + " is not divisible by TP=" + tp)]);
+    if (c.imh % grid !== 0 || c.imw % grid !== 0) a.push(["err", zhen(
+      "H/W 必须能被 <code>vae_scale_factor × 2 = " + grid + "</code> 整除 —— <code>pipeline_qwen_image.py:383</code>，当前 " + c.imh + "×" + c.imw,
+      "H and W must be divisible by <code>vae_scale_factor × 2 = " + grid + "</code> — <code>pipeline_qwen_image.py:383</code>; got " + c.imh + "×" + c.imw)]);
+    if (c.ep) a.push(["err", zhen(
+      'Qwen-Image 是 dense 结构，vllm-omni 会直接抛错：<code>RuntimeError("Expert parallelism enabled for a non-MoE model")</code>',
+      'Qwen-Image is dense, so vllm-omni raises <code>RuntimeError("Expert parallelism enabled for a non-MoE model")</code>')]);
+    var Hl = Math.floor(m.H / tp);
+    if (uly > 1 && Hl % uly !== 0) {
+      var pad = Math.ceil(Hl / uly) * uly;
+      a.push(["warn", zhen(
+        "每 rank " + Hl + " 个 head 不能被 ulysses_degree=" + uly + " 整除，Ulysses 会 <b>pad 到 " + pad + "</b>（<code>_ulysses_all_to_all_any_qkv</code>），浪费 " + ((pad - Hl) / pad * 100).toFixed(0) + "% 的 attention 算力",
+        "This rank holds " + Hl + " heads, which is not divisible by ulysses_degree=" + uly + ". Ulysses <b>pads to " + pad + "</b> (<code>_ulysses_all_to_all_any_qkv</code>), wasting " + ((pad - Hl) / pad * 100).toFixed(0) + "% of the attention compute.")]);
+    }
+    var branches = c.doCfg ? 2 : 1;
+    if (c.cfg > branches) a.push(["warn", zhen(
+      "CFG-P=" + c.cfg + " 大于分支数 " + branches + "：round-robin 分派后有 " + (c.cfg - branches) + " 个 rank 空转 —— <code>_dispatch_branches(i → i % n_ranks)</code>",
+      "CFG-P=" + c.cfg + " exceeds the " + branches + " guidance branches, so round-robin dispatch leaves " + (c.cfg - branches) + " ranks idle — <code>_dispatch_branches(i → i % n_ranks)</code>")]);
+    if (!c.doCfg && c.cfg > 1) a.push(["warn", zhen(
+      "未开启 true CFG 时只有 1 个分支，CFG 并行没有意义",
+      "Without true CFG there is only one branch, so CFG parallelism buys nothing")]);
+    if (c.vae > c.world) a.push(["warn", zhen(
+      "VAE-P=" + c.vae + " 超过 world_size=" + c.world + "，源码会裁剪为 <code>min(vae_patch_parallel_size, world_size)</code> = " + c.world,
+      "VAE-P=" + c.vae + " exceeds world_size=" + c.world + "; the source clamps it to <code>min(vae_patch_parallel_size, world_size)</code> = " + c.world)]);
+    var toks = Math.floor(c.imh / grid) * Math.floor(c.imw / grid);
+    if (sp > 1 && toks % sp !== 0) a.push(["warn", zhen(
+      "image token 数 " + toks + " 不能被 SP=" + sp + " 整除，<code>_sp_plan</code> 会 <code>auto_pad=True</code> 补齐",
+      "The " + toks + " image tokens do not divide evenly by SP=" + sp + "; <code>_sp_plan</code> pads them with <code>auto_pad=True</code>")]);
+    return a;
+  }
+
+  /* ===================== 核心计算 · LLM ===================== */
+  function compute(c) {
+    var m = c.m, tp = c.tp, pcp = c.pcp, dcp = c.dcp, pp = c.pp, dp = c.dp, ep = c.ep;
+    var B = c.B, Sq = c.Sq, Sctx = c.Sctx, adt = c.adt, kdt = c.kdt, wdt = c.wdt;
+    var h = m.h, D = m.D;
+    var Hl = Math.max(1, Math.floor(m.H / tp)), Hkvl = Math.max(1, Math.floor(m.Hkv / tp));
+    var kvRep = m.Hkv < tp ? tp / m.Hkv : 1;
+    var isMoE = m.E > 0, Il = isMoE ? 0 : Math.floor(m.I / tp);
+    var epSize = (isMoE && ep) ? tp * pcp * dp : 1;
+    var expPerRank = isMoE ? (ep ? m.E / epSize : m.E) : 0;
+    var MIl = isMoE ? (ep ? m.MI : Math.floor(m.MI / tp)) : 0;
+    var R = { cls: "llm" };
+    R.dims = { h: h, D: D, Hl: Hl, Hkvl: Hkvl, kvRep: kvRep, Il: Il, isMoE: isMoE, epSize: epSize,
+      expPerRank: expPerRank, MIl: MIl, Hg: Hl * dcp, layersPerRank: Math.ceil(m.L / pp),
+      qkvOut: (Hl + 2 * Hkvl) * D };
+    ["prefill", "decode"].forEach(function (ph) {
+      var pre = ph === "prefill";
+      var N = pre ? (B * Sq) / pcp : B, Nglobal = pre ? B * Sq : B;
+      var pairsCtx = pre ? B * Sq * Sctx : B * Sctx;
+      var pairsNew = pre ? B * Sq * (Sq + 1) / 2 : B * 1;
+      var div = pre ? pcp : 1;
+      var flopAttnCtx = 4 * (pairsCtx / div) * Hl * D, flopAttnNew = 4 * (pairsNew / div) * Hl * D;
+      var qkvOut = R.dims.qkvOut;
+      var flopQKV = 2 * N * h * qkvOut, flopO = 2 * N * (Hl * D) * h, flopMLP;
+      if (!isMoE) flopMLP = 2 * N * h * (2 * Il) + 2 * N * Il * h;
+      else {
+        var tokens = ep ? (dp * Nglobal) / epSize : N;
+        flopMLP = 2 * N * h * m.E + 2 * tokens * m.K * (3 * h * MIl);
+      }
+      var comm = [];
+      if (tp > 1) {
+        comm.push({ k: "TP all-reduce", sub: zhen("o_proj 输出", "o_proj output"), d: "tp", P: tp, kind: "ar",
+          b: AR(N * h, tp, adt), n: "[" + fmtN(N) + ", " + h + "]" });
+        if (!(isMoE && ep)) comm.push({ k: "TP all-reduce", sub: zhen("down_proj 输出", "down_proj output"), d: "tp", P: tp, kind: "ar",
+          b: AR(N * h, tp, adt), n: "[" + fmtN(N) + ", " + h + "]" });
+      }
+      if (pcp > 1 && pre) comm.push({ k: "PCP all-gather", sub: zhen("K,V 写 cache 前收齐", "gather K,V before the cache write"),
+        d: "pcp", P: pcp, kind: "ag", b: AG(N * 2 * Hkvl * D, pcp, kdt), n: "2×[" + fmtN(N) + ", " + Hkvl + ", " + D + "]" });
+      if (dcp > 1) {
+        var ctxTok = pre ? (Sctx > 0 ? N : 0) : N;
+        if (ctxTok > 0) {
+          comm.push({ k: "DCP all-gather", sub: zhen("Q 沿 head 维", "Q along the head dim"), d: "dcp", P: dcp, kind: "ag",
+            b: AG(ctxTok * Hl * D, dcp, adt), n: "[" + fmtN(ctxTok) + ", " + Hl + ", " + D + "]" });
+          if (c.dcpbk === "ag_rs") {
+            comm.push({ k: "DCP all-gather", sub: "LSE (fp32)", d: "dcp", P: dcp, kind: "ag",
+              b: AG(ctxTok * Hl, dcp, 4), n: "[" + fmtN(ctxTok) + ", " + Hl + "]" });
+            comm.push({ k: "DCP reduce-scatter", sub: zhen("LSE 校正后的 out", "output after the LSE correction"), d: "dcp", P: dcp, kind: "rs",
+              b: RS(ctxTok * Hl * D, dcp, adt), n: "[" + fmtN(ctxTok) + ", " + (Hl * dcp) + ", " + D + "]" });
+          } else {
+            comm.push({ k: "DCP all-to-all", sub: zhen("out + LSE 合并", "merge output + LSE"), d: "dcp", P: dcp, kind: "a2a",
+              b: A2A(ctxTok * Hl * dcp * (D + 1), dcp, adt), n: "[" + fmtN(ctxTok) + ", " + (Hl * dcp) + ", " + D + "+1]" });
+          }
+        }
+      }
+      if (isMoE && ep && epSize > 1) {
+        comm.push({ k: "EP all-to-all", sub: "dispatch", d: "ep", P: epSize, kind: "a2a",
+          b: A2A(N * m.K * h, epSize, adt), n: "[" + fmtN(N) + "×top" + m.K + ", " + h + "]" });
+        comm.push({ k: "EP all-to-all", sub: "combine", d: "ep", P: epSize, kind: "a2a",
+          b: A2A(N * m.K * h, epSize, adt), n: "[" + fmtN(N) + "×top" + m.K + ", " + h + "]" });
+      }
+      if (pp > 1) comm.push({ k: "PP P2P", sub: zhen("stage 边界 hidden", "hidden states at the stage boundary"), d: "pp", P: 2, kind: "p2p",
+        b: N * h * adt, n: "[" + fmtN(N) + ", " + h + "]", perStage: true });
+      var flopTotal = flopQKV + flopO + flopMLP + flopAttnCtx + flopAttnNew;
+      R[ph] = { N: N, Nglobal: Nglobal, flopQKV: flopQKV, flopO: flopO, flopMLP: flopMLP,
+        flopAttnCtx: flopAttnCtx, flopAttnNew: flopAttnNew, flopTotal: flopTotal, comm: comm,
+        commTotal: comm.filter(function (x) { return !x.perStage; }).reduce(function (s, x) { return s + x.b; }, 0),
+        qkvOut: qkvOut };
+    });
+    var wPerLayer = isMoE
+      ? h * (Hl + 2 * Hkvl) * D + (Hl * D) * h + h * m.E + expPerRank * 3 * h * MIl
+      : h * (Hl + 2 * Hkvl) * D + (Hl * D) * h + h * 2 * Il + Il * h;
+    R.weightBytesLayer = wPerLayer * wdt;
+    R.weightBytesRank = wPerLayer * wdt * R.dims.layersPerRank;
+    R.kvPerLayer = B * (Sctx + Sq) * Hkvl * D * 2 * kdt / dcp;
+    R.kvPerRank = R.kvPerLayer * R.dims.layersPerRank;
+    R.gpus = dp * pp * tp * pcp; R.worldSize = pp * tp * pcp;
+    return R;
+  }
+
+  /* ===================== 核心计算 · Diffusion ===================== */
+  function computeDiff(c) {
+    var m = c.m, tp = c.tp, uly = c.uly, ring = c.ring, sp = c.sp, cfg = c.cfg, vae = c.vae,
+      pp = c.pp, dp = c.dp, B = c.B, adt = c.adt, wdt = c.wdt;
+    var d = m.d, D = m.D, ff = m.d * m.mult;
+    var Hl = Math.max(1, Math.floor(m.H / tp)), Hu = Math.max(1, Hl / uly), ffl = Math.floor(ff / tp);
+    var grid = m.vaeScale * m.patch;
+    var gh = Math.floor(c.imh / grid), gw = Math.floor(c.imw / grid);
+    var Limg = gh * gw, S = c.Ltxt + Limg;
+    var branches = c.doCfg ? 2 : 1;
+    var brLocal = Math.ceil(branches / Math.min(cfg, branches));
+    var Bl = B * brLocal;
+    var NimgSp = Limg / sp, NimgUly = Limg / ring, Sq = c.Ltxt + NimgUly;
+    var vaeEff = Math.min(vae, c.world);
+    var R = { cls: "diffusion" };
+    R.dims = { d: d, D: D, H: m.H, Hl: Hl, Hu: Hu, ff: ff, ffl: ffl, gh: gh, gw: gw, Limg: Limg,
+      Ltxt: c.Ltxt, S: S, NimgSp: NimgSp, NimgUly: NimgUly, Sq: Sq, branches: branches, brLocal: brLocal,
+      Bl: Bl, layersPerRank: Math.ceil(m.L / pp), sp: sp, uly: uly, ring: ring, vaeEff: vaeEff, grid: grid,
+      latH: Math.floor(c.imh / m.vaeScale), latW: Math.floor(c.imw / m.vaeScale) };
+
+    var f = {};
+    f.mod = 2 * 2 * Bl * d * (6 * d);
+    f.qkvImg = 2 * Bl * NimgSp * d * (3 * Hl * D);
+    f.qkvTxt = 2 * Bl * c.Ltxt * d * (3 * Hl * D);
+    f.attn = 4 * Bl * Sq * S * Hu * D;
+    f.outImg = 2 * Bl * NimgSp * (Hl * D) * d;
+    f.outTxt = 2 * Bl * c.Ltxt * (Hl * D) * d;
+    f.mlpImg = 2 * Bl * NimgSp * d * ffl + 2 * Bl * NimgSp * ffl * d;
+    f.mlpTxt = 2 * Bl * c.Ltxt * d * ffl + 2 * Bl * c.Ltxt * ffl * d;
+    f.total = Object.keys(f).reduce(function (a, k) { return a + f[k]; }, 0);
+
+    var comm = [];
+    if (tp > 1) {
+      comm.push({ k: "TP all-reduce", sub: zhen("to_out（图像流）", "to_out (image stream)"), d: "tp", P: tp, kind: "ar",
+        b: AR(Bl * NimgSp * d, tp, adt), n: "[" + fmtN(Bl * NimgSp) + ", " + d + "]" });
+      comm.push({ k: "TP all-reduce", sub: zhen("to_add_out（文本流）", "to_add_out (text stream)"), d: "tp", P: tp, kind: "ar",
+        b: AR(Bl * c.Ltxt * d, tp, adt), n: "[" + fmtN(Bl * c.Ltxt) + ", " + d + "]" });
+      comm.push({ k: "TP all-reduce", sub: "img_mlp.net.2", d: "tp", P: tp, kind: "ar",
+        b: AR(Bl * NimgSp * d, tp, adt), n: "[" + fmtN(Bl * NimgSp) + ", " + d + "]" });
+      comm.push({ k: "TP all-reduce", sub: "txt_mlp.net.2", d: "tp", P: tp, kind: "ar",
+        b: AR(Bl * c.Ltxt * d, tp, adt), n: "[" + fmtN(Bl * c.Ltxt) + ", " + d + "]" });
+    }
+    if (uly > 1) {
+      var n = Bl * NimgSp * Hl * D;
+      ["Q", "K", "V"].forEach(function (tt) {
+        comm.push({ k: "Ulysses all-to-all", sub: tt + zhen(" · seq→head 重分片", " · seq→head resharding"), d: "uly", P: uly, kind: "a2a",
+          b: A2A(n, uly, adt), n: "[" + fmtN(Bl * NimgSp) + ", " + Hl + ", " + D + "] → [" + fmtN(Bl * NimgUly) + ", " + Hu + ", " + D + "]" });
+      });
+      comm.push({ k: "Ulysses all-to-all", sub: zhen("out · head→seq 还原", "out · head→seq restore"), d: "uly", P: uly, kind: "a2a",
+        b: A2A(n, uly, adt), n: "[" + fmtN(Bl * NimgUly) + ", " + Hu + ", " + D + "] → [" + fmtN(Bl * NimgSp) + ", " + Hl + ", " + D + "]" });
+    }
+    if (ring > 1) {
+      var per = Bl * NimgUly * Hu * D;
+      comm.push({ k: "Ring P2P", sub: zhen("K,V 环形轮转 " + (ring - 1) + " 步", "K,V rotate " + (ring - 1) + " steps around the ring"),
+        d: "ring", P: ring, kind: "ring", b: P2P(2 * per, ring - 1, adt),
+        n: zhen("每步 2×[", "per step 2×[") + fmtN(Bl * NimgUly) + ", " + Hu + ", " + D + "]" });
+    }
+    if (pp > 1) comm.push({ k: "PP P2P", sub: zhen("stage 边界 hidden", "hidden states at the stage boundary"), d: "pp", P: 2, kind: "p2p",
+      b: Bl * (NimgSp + c.Ltxt) * d * adt, n: "[" + fmtN(Bl * (NimgSp + c.Ltxt)) + ", " + d + "]", perStage: true });
+    R.block = { f: f, flopTotal: f.total, comm: comm,
+      commTotal: comm.filter(function (x) { return !x.perStage; }).reduce(function (s, x) { return s + x.b; }, 0) };
+
+    var stepComm = [];
+    if (sp > 1) stepComm.push({ k: "SP all-gather", sub: zhen("proj_out 输出收齐", "gather the proj_out result"), d: "sp", P: sp, kind: "ag",
+      b: AG(Bl * NimgSp * m.inCh, sp, adt),
+      n: "[" + fmtN(Bl * NimgSp) + ", " + m.inCh + "] → [" + fmtN(Bl * Limg) + ", " + m.inCh + "]" });
+    if (cfg > 1 && branches > 1) stepComm.push({ k: "CFG all-gather", sub: zhen("各分支噪声预测互换", "exchange the per-branch noise predictions"),
+      d: "cfg", P: Math.min(cfg, branches), kind: "ag",
+      b: AG(B * brLocal * Limg * m.inCh, Math.min(cfg, branches), adt),
+      n: "[" + fmtN(B * brLocal * Limg) + ", " + m.inCh + "]" });
+    R.step = { comm: stepComm, commTotal: stepComm.reduce(function (s, x) { return s + x.b; }, 0),
+      flop: f.total * R.dims.layersPerRank };
+
+    R.vaeComm = vaeEff > 1 ? AG(B * c.imh * c.imw * 3 / vaeEff, vaeEff, adt) : 0;
+
+    var wRepl = 2 * (d * 6 * d + 6 * d);
+    var wShardFull = 2 * (d * 3 * m.H * D) + 2 * (m.H * D * d) + 2 * (d * ff + ff * d);
+    var wPerLayer = wRepl + wShardFull / tp;
+    R.weightBytesLayer = wPerLayer * wdt;
+    R.weightBytesRank = wPerLayer * wdt * R.dims.layersPerRank;
+    R.wReplBytes = wRepl * wdt; R.wShardBytes = wShardFull / tp * wdt;
+    R.latentBytes = B * branches * m.zDim * R.dims.latH * R.dims.latW * adt;
+    R.gpus = c.world; R.worldSize = c.world;
+    R.totalFlop = f.total * R.dims.layersPerRank * c.steps;
+    return R;
+  }
+
+  /* ===================== SVG · LLM attention ===================== */
+  function dcpRankOf(c) {
+    if (c.dcp <= 1) return 0;
+    var order = [];
+    for (var a = 0; a < c.pp; a++) for (var tt = 0; tt < c.tp; tt++) for (var p = 0; p < c.pcp; p++)
+      order.push(a * c.pcp * c.tp + p * c.tp + tt);
+    var pos = order.indexOf(c.self);
+    return pos < 0 ? 0 : pos % c.dcp;
+  }
+  function svgAttnPrefill(c, R) {
+    var pcp = c.pcp, dcp = c.dcp, Sq = c.Sq, Sctx = c.Sctx, Hl = R.dims.Hl;
+    var pcpRank = Math.floor(c.self / c.tp) % pcp, dcpRank = dcpRankOf(c);
+    var W = 680, H = 336, gx = 118, gy = 44, gw = 470, gh = 222, nch = 2 * pcp, hasCtx = Sctx > 0;
+    var ctxW = hasCtx ? Math.max(140, gw * Math.min(0.62, Sctx / (Sctx + Sq))) : 0;
+    var newW = gw - ctxW - (hasCtx ? 10 : 0);
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    if (hasCtx) s += txt(gx + ctxW / 2, gy - 20, zhen("已有 context  " + fmtN(Sctx) + " keys", "cached context — " + fmtN(Sctx) + " keys"),
+      { sz: 10, fill: "var(--pe-svg-fg)", w: 600 });
+    s += txt(gx + ctxW + (hasCtx ? 10 : 0) + newW / 2, gy - 20,
+      zhen("本次 prefill  " + fmtN(Sq) + " keys", "this prefill — " + fmtN(Sq) + " keys"), { sz: 10, fill: "var(--pe-svg-fg)", w: 600 });
+    s += txt(gx - 10, gy - 20, zhen("key →", "key →"), { sz: 9.5, anchor: "end", fill: "var(--pe-svg-dim)" });
+    s += txt(20, gy + gh / 2, zhen("query ↓  " + fmtN(Sq), "query ↓  " + fmtN(Sq)), { sz: 10, fill: "var(--pe-svg-fg)", w: 600, rot: -90 });
+    var owner = function (i) { return i < pcp ? i : nch - 1 - i; }, rowH = gh / nch, i, j;
+    if (hasCtx) {
+      for (i = 0; i < nch; i++) {
+        var o = owner(i), mine = o === pcpRank, ry = gy + i * rowH;
+        for (var dd = 0; dd < dcp; dd++) {
+          var cw = ctxW / dcp, cx = gx + dd * cw, active = mine && (dcp === 1 || dd === dcpRank);
+          s += '<rect x="' + cx + '" y="' + ry + '" width="' + cw + '" height="' + rowH + '" fill="' +
+            (active ? rc("dcp", dcpRank, dcp, dcpRank) : (mine ? rc("dcp", 0, 4, -1) : rc("pcp", 0, 4, -1))) +
+            '" stroke="var(--pe-panel2)" stroke-width=".5" opacity="' + (active ? 1 : (mine ? 0.9 : 0.6)) + '"/>';
+        }
+        if (mine) s += '<rect x="' + gx + '" y="' + ry + '" width="' + ctxW + '" height="' + rowH +
+          '" fill="none" stroke="var(--pe-pcp)" stroke-width="1.4"/>';
+      }
+      if (dcp > 1 && ctxW / dcp > 26) for (i = 0; i < dcp; i++)
+        s += txt(gx + (i + 0.5) * ctxW / dcp, gy + gh + 13, "d" + i,
+          { sz: 8.5, fill: i === dcpRank ? "var(--pe-dcp)" : "var(--pe-svg-faint)", w: i === dcpRank ? 700 : 400 });
+    }
+    var nx = gx + ctxW + (hasCtx ? 10 : 0), cellW = newW / nch, perRank = [];
+    for (i = 0; i < pcp; i++) perRank.push(0);
+    for (i = 0; i < nch; i++) {
+      var o2 = owner(i), mine2 = o2 === pcpRank, ry2 = gy + i * rowH;
+      for (j = 0; j < nch; j++) {
+        var act = j <= i; if (act) perRank[o2]++;
+        s += '<rect x="' + (nx + j * cellW) + '" y="' + ry2 + '" width="' + cellW + '" height="' + rowH + '" fill="' +
+          (act ? (mine2 ? rc("pcp", pcpRank, pcp, pcpRank) : rc("pcp", o2, pcp, -1)) : "var(--pe-svg-cell-off)") +
+          '" stroke="var(--pe-panel2)" stroke-width=".5" opacity="' + (act ? (mine2 ? 1 : 0.6) : 1) + '"/>';
+      }
+      s += txt(gx - 8, ry2 + rowH / 2 + 3.2, zhen("块" + i + "→r" + o2, "chunk " + i + "→r" + o2),
+        { sz: 8.5, anchor: "end", fill: mine2 ? "var(--pe-pcp)" : "var(--pe-svg-faint)", w: mine2 ? 700 : 400 });
+    }
+    s += '<rect x="' + gx + '" y="' + gy + '" width="' + gw + '" height="' + gh + '" fill="none" stroke="var(--pe-svg-line)"/>';
+    var y0 = gy + gh + 30;
+    s += txt(gx, y0, zhen("本 rank 的 query 行块：块 " + pcpRank + " 与块 " + (nch - 1 - pcpRank),
+      "this rank owns query chunks " + pcpRank + " and " + (nch - 1 - pcpRank)),
+      { sz: 10, anchor: "start", fill: "var(--pe-pcp)", w: 600 });
+    s += txt(gx, y0 + 15, zhen(
+      "因果三角里各 rank 的有效格子数：" + perRank.map(function (v, k) { return "r" + k + "=" + v; }).join("  ") + "  → DualChunkSwap 让负载均衡",
+      "active cells per rank in the causal triangle: " + perRank.map(function (v, k) { return "r" + k + "=" + v; }).join("  ") + "  → DualChunkSwap balances the load"),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(gx, y0 + 30, dcp > 1
+      ? zhen("DCP：context 列只保留第 " + dcpRank + " 条（1/" + dcp + "），但 Q 已 all-gather → head 数 " + Hl + "×" + dcp + "=" + (Hl * dcp) + " ⇒ FLOPs 不变，省的是 KV 显存与读带宽",
+        "DCP keeps only column stripe " + dcpRank + " (1/" + dcp + ") of the context, but Q was all-gathered so the head count is " + Hl + "×" + dcp + "=" + (Hl * dcp) + " ⇒ same FLOPs; what shrinks is KV memory and read bandwidth")
+      : zhen("DCP=1：本 rank 持有全部 context 的 KV（按 TP 切 KV heads，" + R.dims.Hkvl + " 个）",
+        "DCP=1: this rank holds the whole context KV (" + R.dims.Hkvl + " KV heads after the TP split)"),
+      { sz: 9.5, anchor: "start", fill: dcp > 1 ? "var(--pe-dcp)" : "var(--pe-svg-faint)" });
+    return s + "</svg>";
+  }
+  function svgAttnDecode(c, R) {
+    var dcp = c.dcp, Sctx = c.Sctx, B = c.B, Hl = R.dims.Hl, Hkvl = R.dims.Hkvl, D = R.dims.D;
+    var dcpRank = dcpRankOf(c);
+    var W = 680, H = 232, gx = 118, gy = 52, gw = 470, gh = 44;
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    s += txt(gx + gw / 2, gy - 26, zhen("key →  已有 context " + fmtN(Sctx) + " + 本步 1",
+      "key →  cached context " + fmtN(Sctx) + " + 1 new"), { sz: 10, fill: "var(--pe-svg-fg)", w: 600 });
+    s += txt(gx - 10, gy + gh / 2 + 3, "query " + B, { sz: 10, anchor: "end", fill: "var(--pe-svg-fg)", w: 600 });
+    var nw = 26, cw = (gw - nw) / Math.max(1, dcp), i;
+    for (i = 0; i < dcp; i++) {
+      var mine = i === dcpRank;
+      s += '<rect x="' + (gx + i * cw) + '" y="' + gy + '" width="' + cw + '" height="' + gh + '" fill="' +
+        rc("dcp", i, dcp, dcpRank) + '" stroke="' + rstroke(i, dcpRank) + '" stroke-width="' + (mine ? 1.6 : 0.7) + '"/>';
+      if (cw > 26) s += txt(gx + (i + 0.5) * cw, gy + gh / 2 + 3.5, "d" + i, { sz: 9, fill: onShard(i, dcpRank), w: 700 });
+    }
+    s += '<rect x="' + (gx + gw - nw) + '" y="' + gy + '" width="' + nw + '" height="' + gh +
+      '" fill="var(--pe-svg-neutral)" stroke="var(--pe-svg-line)"/>';
+    s += txt(gx + gw - nw / 2, gy + gh + 13, zhen("新", "new"), { sz: 8.5, fill: "var(--pe-svg-dim)" });
+    s += txt(gx + gw / 2, gy + gh + 30, dcp > 1
+      ? zhen("KV cache 沿 token 维交错分片：token i → dcp_rank (i/interleave) % " + dcp + "；本 rank 只读 " + fmtN(Sctx / dcp) + " 个 key",
+        "The KV cache is interleaved along tokens: token i → dcp_rank (i/interleave) % " + dcp + "; this rank reads only " + fmtN(Sctx / dcp) + " keys")
+      : zhen("本 rank 持有全部 " + fmtN(Sctx) + " 个 key", "this rank holds all " + fmtN(Sctx) + " keys"),
+      { sz: 9.5, fill: "var(--pe-svg-dim)" });
+    var hy = gy + gh + 58, nh = Math.min(dcp, 8), hw = Math.min(46, gw / Math.max(1, nh) - 6);
+    s += txt(gx - 10, hy + 16, zhen("head 维", "head dim"), { sz: 10, anchor: "end", fill: "var(--pe-svg-fg)", w: 600 });
+    for (i = 0; i < nh; i++) {
+      s += '<rect x="' + (gx + i * (hw + 6)) + '" y="' + hy + '" width="' + hw + '" height="32" fill="' +
+        rc("dcp", i, dcp, dcpRank) + '" stroke="' + rstroke(i, dcpRank) + '" stroke-width="' + (i === dcpRank ? 1.6 : 0.7) + '" rx="4"/>';
+      s += txt(gx + i * (hw + 6) + hw / 2, hy + 20, Hl + "h", { sz: 9, fill: onShard(i, dcpRank), w: 700 });
+    }
+    s += txt(gx + nh * (hw + 6) + 8, hy + 20, dcp > 1
+      ? zhen("← Q all-gather 后本 rank 算 " + (Hl * dcp) + " 个 head", "← after the Q all-gather this rank computes " + (Hl * dcp) + " heads")
+      : zhen("本 rank " + Hl + " 个 head", "this rank holds " + Hl + " heads"),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-dcp)", w: 600 });
+    s += txt(gx, hy + 56, dcp > 1
+      ? zhen("每 rank 出「全组 " + (Hl * dcp) + " head × 自己 1/" + dcp + " 的 key」的部分结果 + LSE，再跨 DCP 组做 log-sum-exp 校正合并",
+        "Each rank produces a partial result plus LSE over “all " + (Hl * dcp) + " group heads × its own 1/" + dcp + " of the keys”, then the group merges them with a log-sum-exp correction")
+      : zhen("KV 读取量 " + fmtB(B * Sctx * Hkvl * D * 2 * c.kdt) + " / 层 —— decode 的真正瓶颈",
+        "KV traffic " + fmtB(B * Sctx * Hkvl * D * 2 * c.kdt) + " per layer — the real decode bottleneck"),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    return s + "</svg>";
+  }
+
+  /* ===================== SVG · Diffusion ===================== */
+  function spRankOf(c) { return Math.floor(c.self / c.tp) % c.sp; }
+
+  function svgJointSeq(c, R) {
+    var sp = c.sp, Ltxt = R.dims.Ltxt, Limg = R.dims.Limg, spRank = spRankOf(c);
+    var W = 680, H = 136, x0 = 40, x1 = W - 40, tot = Ltxt + Limg;
+    var tw = Math.max(60, (x1 - x0) * Ltxt / tot), iw = (x1 - x0) - tw, y = 44, hh = 40;
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    s += txt(x0, 20, zhen("joint 序列 = [ 文本 token ; 图像 token ]（MMDiT 双流在 attention 处拼接）",
+      "joint sequence = [ text tokens ; image tokens ] — the two MMDiT streams meet at attention"),
+      { sz: 10, anchor: "start", fill: "var(--pe-svg-fg)", w: 600 });
+    s += '<rect x="' + x0 + '" y="' + y + '" width="' + tw + '" height="' + hh +
+      '" fill="var(--pe-txt)" stroke="var(--pe-txt)" stroke-width="1.4" opacity=".55"/>';
+    s += txt(x0 + tw / 2, y + hh / 2 + 4, "txt " + fmtN(Ltxt), { sz: 10, fill: "var(--pe-svg-fg)", w: 700 });
+    s += txt(x0 + tw / 2, y + hh + 15, zhen("全部 SP rank 复制", "replicated on every SP rank"), { sz: 8.5, fill: "var(--pe-txt)" });
+    for (var i = 0; i < sp; i++) {
+      var bw = iw / sp, bx = x0 + tw + i * bw;
+      s += '<rect x="' + bx + '" y="' + y + '" width="' + bw + '" height="' + hh + '" fill="' + rc("sp", i, sp, spRank) +
+        '" stroke="' + rstroke(i, spRank) + '" stroke-width="' + (i === spRank ? 1.6 : 0.7) + '"/>';
+      if (bw > 28) s += txt(bx + bw / 2, y + hh / 2 + 4, "sp" + i, { sz: 9, fill: onShard(i, spRank), w: 700 });
+    }
+    s += txt(x0 + tw + iw / 2, y + hh + 15, zhen(
+      "img " + fmtN(Limg) + " = " + R.dims.gh + "×" + R.dims.gw + " 个 patch，按 SP=" + sp + " 切成 " + fmtN(Limg / sp) + "/rank",
+      "img " + fmtN(Limg) + " = " + R.dims.gh + "×" + R.dims.gw + " patches, split by SP=" + sp + " into " + fmtN(Limg / sp) + " per rank"),
+      { sz: 8.5, fill: "var(--pe-svg-dim)" });
+    s += txt(x0, H - 8, zhen(
+      "_sp_plan: ImageRopePrepare 输出 split_dim=1（seq 维），txt_freqs 保持复制；proj_out 处 SequenceParallelOutput(gather_dim=1) 收回",
+      "_sp_plan: ImageRopePrepare splits its output on dim 1 (sequence); txt_freqs stays replicated; proj_out gathers it back with SequenceParallelOutput(gather_dim=1)"),
+      { sz: 9, anchor: "start", fill: "var(--pe-svg-faint)" });
+    return s + "</svg>";
+  }
+
+  function svgUlysses(c, R) {
+    var u = R.dims.uly, spRank = spRankOf(c), uRank = u > 1 ? spRank % u : 0;
+    var Hl = R.dims.Hl, Hu = R.dims.Hu;
+    var W = 680, H = 300, gw = 210, gh = 160, ax = 60, ay = 60, bx = W - 60 - gw, by = 60;
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    function grid(x, y, dir, P, self, lab, sub) {
+      var o = txt(x + gw / 2, y - 26, lab, { sz: 11, fill: "var(--pe-svg-fg)", w: 700 });
+      o += txt(x + gw / 2, y - 12, sub, { sz: 9, fill: "var(--pe-svg-dim)" });
+      for (var i = 0; i < P; i++) {
+        var bxx = dir === "h" ? x : x + i * gw / P, byy = dir === "h" ? y + i * gh / P : y;
+        var bww = dir === "h" ? gw : gw / P, bhh = dir === "h" ? gh / P : gh;
+        o += '<rect x="' + bxx + '" y="' + byy + '" width="' + bww + '" height="' + bhh + '" fill="' + rc("uly", i, P, self) +
+          '" stroke="' + rstroke(i, self) + '" stroke-width="' + (i === self ? 1.8 : 0.7) + '"/>';
+        o += txt(bxx + bww / 2, byy + bhh / 2 + 3.5, "r" + i, { sz: 9.5, fill: onShard(i, self), w: 700 });
+      }
+      o += '<rect x="' + x + '" y="' + y + '" width="' + gw + '" height="' + gh + '" fill="none" stroke="var(--pe-svg-line)"/>';
+      o += txt(x + gw / 2, y + gh + 16, zhen("head 维 →", "head dim →"), { sz: 9.5, fill: "var(--pe-svg-dim)" });
+      o += txt(x - 12, y + gh / 2, zhen("seq 维 ↓", "seq dim ↓"), { sz: 9.5, fill: "var(--pe-svg-dim)", rot: -90 });
+      return o;
+    }
+    s += grid(ax, ay, "h", u, uRank, zhen("a2a 之前", "before the a2a"), zhen("seq 被切 · head 完整", "sequence split · all heads"));
+    s += grid(bx, by, "v", u, uRank, zhen("a2a 之后", "after the a2a"), zhen("seq 完整 · head 被切", "full sequence · heads split"));
+    var my = ay + gh / 2;
+    s += '<path d="M' + (ax + gw + 18) + "," + my + " L" + (bx - 18) + "," + my + '" stroke="var(--pe-uly)" stroke-width="2" marker-end="url(#pe-ah)"/>';
+    s += txt((ax + gw + bx) / 2, my - 10, "all_to_all_single", { sz: 10, fill: "var(--pe-uly)", w: 700 });
+    s += txt((ax + gw + bx) / 2, my + 14, zhen("×4（Q,K,V,out）", "×4 (Q, K, V, out)"), { sz: 9, fill: "var(--pe-svg-dim)" });
+    s += txt(ax, ay + gh + 40, zhen(
+      "本 rank：[" + fmtN(R.dims.NimgSp) + " tok, " + Hl + " head] → [" + fmtN(R.dims.NimgUly) + " tok, " + Hu + " head]",
+      "this rank: [" + fmtN(R.dims.NimgSp) + " tok, " + Hl + " heads] → [" + fmtN(R.dims.NimgUly) + " tok, " + Hu + " heads]"),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-svg-fg)" });
+    s += txt(ax, ay + gh + 56, zhen(
+      "面积不变 ⇒ attention FLOPs 不变；换来的是每 rank 只需 " + Hu + " 个 head 的权重与激活",
+      "the area is unchanged, so attention FLOPs are unchanged; what you gain is that each rank only touches " + Hu + " heads' worth of weights and activations"),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    if (u > 1 && Hl % u !== 0) s += txt(ax, ay + gh + 72, zhen(
+      "⚠ " + Hl + " 个 head 不整除 " + u + "，会 pad 到 " + (Math.ceil(Hl / u) * u),
+      "⚠ " + Hl + " heads do not divide by " + u + ", so it pads to " + (Math.ceil(Hl / u) * u)),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-warn)" });
+    return s + "</svg>";
+  }
+
+  function svgRing(c, R) {
+    var r = R.dims.ring, spRank = spRankOf(c);
+    var rRank = r > 1 ? Math.floor(spRank / R.dims.uly) % r : 0;
+    var W = 680, H = 300, gx = 140, gy = 52, g = 190, cell = g / Math.max(1, r);
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    s += txt(gx + g / 2, gy - 28, zhen("Q 块 × K 块（joint 全矩阵，非因果）", "Q blocks × K blocks (full joint matrix, non-causal)"),
+      { sz: 11, fill: "var(--pe-svg-fg)", w: 700 });
+    s += txt(gx + g / 2, gy + g + 18, zhen("K/V 块（按 seq 切）→", "K/V blocks (split along seq) →"), { sz: 9.5, fill: "var(--pe-svg-dim)" });
+    s += txt(gx - 14, gy + g / 2, zhen("Q 块 ↓", "Q blocks ↓"), { sz: 9.5, fill: "var(--pe-svg-dim)", rot: -90 });
+    for (var i = 0; i < r; i++) for (var j = 0; j < r; j++) {
+      var mine = i === rRank, step = ((i - j) % r + r) % r;
+      s += '<rect x="' + (gx + j * cell) + '" y="' + (gy + i * cell) + '" width="' + cell + '" height="' + cell + '" fill="' +
+        (mine ? rc("ring", j, r, -1) : "var(--pe-svg-cell-off)") + '" stroke="' + (mine ? "var(--pe-svg-fg)" : "var(--pe-panel2)") +
+        '" stroke-width="' + (mine ? 1.2 : 0.5) + '" opacity="' + (mine ? 1 : 0.6) + '"/>';
+      if (cell >= 22 && mine) s += txt(gx + (j + 0.5) * cell, gy + (i + 0.5) * cell + 3.5, "t" + step,
+        { sz: 9, fill: "var(--pe-svg-fg)", w: 700 });
+    }
+    s += '<rect x="' + gx + '" y="' + gy + '" width="' + g + '" height="' + g + '" fill="none" stroke="var(--pe-svg-line)"/>';
+    for (var k = 0; k < r; k++) {
+      s += txt(gx - 8, gy + (k + 0.5) * cell + 3.5, "r" + k,
+        { sz: 9, anchor: "end", fill: k === rRank ? "var(--pe-ring)" : "var(--pe-svg-faint)", w: k === rRank ? 700 : 400 });
+      s += txt(gx + (k + 0.5) * cell, gy + g + 34, "r" + k, { sz: 9, fill: "var(--pe-svg-faint)" });
+    }
+    var tx = gx + g + 50;
+    s += txt(tx, gy + 6, zhen("本 rank = r" + rRank + "，只算高亮的一整行", "this rank is r" + rRank + " and computes only the highlighted row"),
+      { sz: 10, anchor: "start", fill: "var(--pe-ring)", w: 700 });
+    s += txt(tx, gy + 24, zhen("t0：用自己的 K/V 块", "t0: use its own K/V block"), { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(tx, gy + 40, zhen("t1…t" + (r - 1) + "：K/V 沿环轮转 " + (r - 1) + " 次",
+      "t1…t" + (r - 1) + ": K/V rotate " + (r - 1) + " times"), { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(tx, gy + 56, "send_recv(k) + send_recv(v)", { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(tx, gy + 72, zhen("结果按 LSE 在线合并", "results merged online via LSE"), { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(tx, gy + 96, zhen("文本 K/V 作为 joint 静态前缀，", "the text K/V is a static joint prefix —"), { sz: 9.5, anchor: "start", fill: "var(--pe-txt)" });
+    s += txt(tx, gy + 111, zhen("每步都参与、不轮转", "it joins every step and never rotates"), { sz: 9.5, anchor: "start", fill: "var(--pe-txt)" });
+    s += txt(gx, gy + g + 58, zhen(
+      "通信是 P2P（可与计算 overlap），总量 2×(" + r + "−1)×本地 K/V = " + fmtB(P2P(2 * R.dims.Bl * R.dims.NimgUly * R.dims.Hu * R.dims.D, r - 1, c.adt)) + " / rank / 层",
+      "the traffic is P2P and overlappable: 2×(" + r + "−1)× the local K/V = " + fmtB(P2P(2 * R.dims.Bl * R.dims.NimgUly * R.dims.Hu * R.dims.D, r - 1, c.adt)) + " per rank per layer"),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(gx, gy + g + 74, zhen(
+      "对比 Ulysses 的 4 次 all-to-all：字节更多但可隐藏，且不受 head 数限制",
+      "versus Ulysses' four all-to-alls: more bytes, but hideable, and not capped by the head count"),
+      { sz: 9.5, anchor: "start", fill: "var(--pe-svg-faint)" });
+    return s + "</svg>";
+  }
+
+  function svgPipeline(c, R) {
+    var W = 1400, H = 220, lpr = R.dims.layersPerRank;
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg">';
+    function box(x, y, w, h, fill, stroke, t1, t2, t3) {
+      var o = '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="8" fill="' + fill +
+        '" stroke="' + stroke + '" stroke-width="1.4"/>';
+      o += txt(x + w / 2, y + 22, t1, { sz: 12, fill: "var(--pe-svg-fg)", w: 700 });
+      if (t2) o += txt(x + w / 2, y + 40, t2, { sz: 9.5, fill: "var(--pe-svg-dim)" });
+      if (t3) o += txt(x + w / 2, y + 56, t3, { sz: 9.5, fill: "var(--pe-svg-faint)" });
+      return o;
+    }
+    function arrow(x1, x2, y) {
+      return '<path d="M' + x1 + "," + y + " L" + x2 + "," + y + '" stroke="var(--pe-svg-line)" stroke-width="1.6" marker-end="url(#pe-ah)"/>';
+    }
+    var neutral = "var(--pe-svg-cell-off)", nline = "var(--pe-svg-line)";
+    s += box(20, 60, 190, 74, neutral, nline, zhen("文本编码器", "Text encoder"),
+      "Qwen2.5-VL → [B, " + R.dims.Ltxt + ", " + c.m.txtDim + "]",
+      zhen("text_encoder_tp_size 独立配置", "text_encoder_tp_size is configured separately"));
+    s += arrow(214, 244, 97);
+    s += '<rect x="248" y="34" width="700" height="140" rx="10" fill="none" stroke="var(--pe-svg-line)" stroke-dasharray="5 4"/>';
+    s += txt(598, 26, zhen("去噪循环 × " + c.steps + " 步", "denoising loop × " + c.steps + " steps"), { sz: 11, fill: "var(--pe-svg-dim)", w: 700 });
+    s += box(268, 60, 180, 74, neutral, "var(--pe-tp)", "MMDiT × " + lpr,
+      zhen("每 rank 的 block 数（共 " + c.m.L + " / PP=" + c.pp + "）", "blocks on this rank (" + c.m.L + " total / PP=" + c.pp + ")"),
+      zhen("TP / SP 在这里每层生效", "TP / SP fire here, every layer"));
+    s += arrow(452, 486, 97);
+    s += box(490, 60, 150, 74, neutral, "var(--pe-tp)", "proj_out",
+      "[B, " + fmtN(R.dims.NimgSp) + ", " + c.m.inCh + "]",
+      c.sp > 1 ? zhen("→ SP all-gather", "→ SP all-gather") : "—");
+    s += arrow(644, 678, 97);
+    s += box(682, 60, 120, 74, c.cfg > 1 ? "var(--pe-svg-cell-off)" : neutral, c.cfg > 1 ? "var(--pe-cfg)" : nline,
+      zhen("CFG 合并", "CFG combine"),
+      R.dims.branches + zhen(" 分支 / CFG-P=", " branches / CFG-P=") + c.cfg,
+      c.cfg > 1 ? "→ all-gather" : zhen("本地完成", "done locally"));
+    s += arrow(806, 840, 97);
+    s += box(844, 60, 88, 74, neutral, nline, "scheduler", "step()",
+      zhen("确定性、各 rank 一致", "deterministic, identical on every rank"));
+    s += '<path d="M888,138 C888,182 320,182 320,138" fill="none" stroke="var(--pe-svg-line)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#pe-ah)"/>';
+    s += arrow(952, 986, 97);
+    s += box(990, 60, 190, 74, neutral, c.vae > 1 ? "var(--pe-vae)" : nline, zhen("VAE 解码", "VAE decode"),
+      "latent " + R.dims.latH + "×" + R.dims.latW + "×" + c.m.zDim + " → " + c.imh + "×" + c.imw,
+      c.vae > 1 ? zhen("VAE-P=" + R.dims.vaeEff + " · patch 分块 + all-gather", "VAE-P=" + R.dims.vaeEff + " · patch split + all-gather")
+        : zhen("单卡完成", "single GPU"));
+    s += arrow(1184, 1218, 97);
+    s += box(1222, 60, 150, 74, neutral, nline, zhen("输出图像", "Output image"), c.imh + "×" + c.imw + "×3", "");
+    s += txt(20, 200, zhen(
+      "每层生效：TP（4 次 all-reduce）· SP-Ulysses（4 次 a2a）· SP-Ring（" + Math.max(0, c.ring - 1) + " 步 P2P）   ｜   每步生效：SP all-gather · CFG all-gather   ｜   整次只做一次：VAE-P all-gather",
+      "Per layer: TP (4 all-reduces) · SP-Ulysses (4 all-to-alls) · SP-Ring (" + Math.max(0, c.ring - 1) + " P2P steps)   |   Per step: SP all-gather · CFG all-gather   |   Once per image: VAE-P all-gather"),
+      { sz: 10, anchor: "start", fill: "var(--pe-svg-dim)" });
+    s += txt(20, 216, zhen(
+      "注意：Diffusion 没有 KV cache —— 每一步都要把全部 token 重算一遍，因此它是 compute-bound，而不是 LLM decode 那样的 memory-bound。",
+      "Note: diffusion has no KV cache. Every step recomputes every token, which makes it compute-bound rather than memory-bound like LLM decode."),
+      { sz: 10, anchor: "start", fill: "var(--pe-svg-faint)" });
+    return s + "</svg>";
+  }
+
+  /* ===================== 渲染 ===================== */
+  function render() {
+    var isD = CLS === "diffusion";
+    $$(".pe-g-llm").forEach(function (e) { e.classList.toggle("pe-hide", isD); });
+    $$(".pe-g-diff").forEach(function (e) { e.classList.toggle("pe-hide", !isD); });
+    $("wl-llm").classList.toggle("pe-hide", isD);
+    $("wl-diff").classList.toggle("pe-hide", !isD);
+    $("cust-llm").classList.toggle("pe-hide", isD);
+    $("cust-diff").classList.toggle("pe-hide", !isD);
+    $("title").textContent = isD ? t("title_diff") : t("title_llm");
+    $("lead").textContent = isD ? t("lead_diff") : t("lead_llm");
+    $("srcs").innerHTML = (isD ? t("src_diff") : t("src_llm")) + (isD
+      ? "<code>diffusion/distributed/parallel_state.py</code> · <code>config/omni_config.py</code> · " +
+        "<code>diffusion/models/qwen_image/qwen_image_transformer.py</code> · " +
+        "<code>diffusion/attention/parallel/{ulysses,ring}.py</code> · " +
+        "<code>diffusion/distributed/{cfg_parallel,vae_patch_parallel}.py</code>"
+      : "<code>distributed/parallel_state.py</code> · <code>config/parallel.py</code> · " +
+        "<code>model_executor/layers/linear.py</code> · <code>v1/attention/backends/flash_attn.py</code> · " +
+        "<code>v1/worker/gpu/pcp_manager.py</code> · <code>v1/attention/ops/common.py</code>");
+
+    var models = isD ? MODELS_DIFF : MODELS_LLM;
+    var want = Object.keys(models).join("|") + "|" + L;
+    if ($("model").dataset.k !== want) {
+      var prev = $("model").value;
+      $("model").dataset.k = want;
+      $("model").innerHTML = Object.keys(models).map(function (k) {
+        return '<option value="' + k + '">' + esc(modelLabel(k)) + "</option>";
+      }).join("");
+      if (models[prev]) $("model").value = prev;
+    }
+    var c = readCfg();
+    $("custom").classList.toggle("pe-hide", !models[c.name] || !models[c.name].custom);
+    if ($("self").options.length !== c.world || $("self").dataset.l !== L) {
+      $("self").dataset.l = L;
+      var cur = +$("self").value || 0;
+      var opts = "";
+      for (var i = 0; i < c.world; i++) opts += '<option value="' + i + '">' + t("rank_opt") + i + "</option>";
+      $("self").innerHTML = opts;
+      $("self").value = String(Math.min(cur, c.world - 1));
+      c = readCfg();
+    }
+
+    var errs = validate(c), fatal = errs.some(function (e) { return e[0] === "err"; });
+    $("alerts").innerHTML = errs.length
+      ? errs.map(function (e) {
+          return '<div class="pe-alert ' + e[0] + '"><b>' + (e[0] === "err" ? t("bad") : t("warn")) + "</b><span>" + e[1] + "</span></div>";
+        }).join("")
+      : '<div class="pe-alert ok"><b>' + t("ok") + "</b><span>" + (isD
+          ? t("ok_diff") + c.tp + "×" + c.sp + "×" + c.pp + "×" + c.cfg + "×" + c.dp + " = " + c.world
+          : t("ok_llm") + c.world) + "</span></div>";
+    if (fatal) {
+      ["kpis", "pipeline", "rankgrid", "ranklegend", "grpnote", "gemms", "attnmats", "tl", "flow",
+        "flopbars", "commbars", "sweep", "tbl"].forEach(function (i2) { $(i2).innerHTML = ""; });
+      $("notes").innerHTML = isD ? notesDiff(c) : notesLLM(c);
+      return;
+    }
+
+    $("h-rank").innerHTML = t("sec_rank") + ' <span class="pe-hn">' + (isD ? t("sec_rank_n_diff") : t("sec_rank_n_llm")) + "</span>";
+    $("h-attn").innerHTML = (isD ? t("sec_attn_diff") : t("sec_attn_llm")) +
+      ' <span class="pe-hn">' + (isD ? t("sec_attn_diff_n") : t("sec_attn_llm_n")) + "</span>";
+    $("h-flow").innerHTML = isD ? t("sec_flow_diff") : t("sec_flow_llm");
+    $("h-scale").textContent = t("sec_scale");
+    $("h-pipeline").innerHTML = t("sec_pipeline") + ' <span class="pe-hn">' + t("sec_pipeline_n") + "</span>";
+    $("h-gemm").innerHTML = t("sec_gemm") + ' <span class="pe-hn">' + t("sec_gemm_n") + "</span>";
+    $("h-table").textContent = t("sec_table");
+    $("h-flop").textContent = t("sec_flop");
+    $("h-comm").textContent = t("sec_comm");
+    $("h-sweep").textContent = t("sec_sweep");
+    $("h-notes").textContent = t("sec_notes");
+
+    if (isD) {
+      var Rd = computeDiff(c);
+      $("pipeline").innerHTML = '<div class="pe-gcard bare">' + svgPipeline(c, Rd) + "</div>";
+      kpiDiff(c, Rd); rankGridDiff(c, Rd); gemmsDiff(c, Rd); attnDiff(c, Rd);
+      timelineDiff(c, Rd); flowDiff(c, Rd); tableDiff(c, Rd); barsDiff(c, Rd); sweep(c);
+      $("notes").innerHTML = notesDiff(c, Rd);
+    } else {
+      var Rl = compute(c);
+      kpiLLM(c, Rl); rankGridLLM(c, Rl); gemmsLLM(c, Rl); attnLLM(c, Rl);
+      timelineLLM(c, Rl); flowLLM(c, Rl); tableLLM(c, Rl); barsLLM(c, Rl); sweep(c);
+      $("notes").innerHTML = notesLLM(c, Rl);
+    }
+  }
+
+  /* ---------- KPI ---------- */
+  function paintKPI(list) {
+    $("kpis").innerHTML = list.map(function (r) {
+      return '<div class="pe-kpi"><div class="k">' + r[0] + '</div><div class="v">' + r[1] + '</div><div class="n">' + r[2] + "</div></div>";
+    }).join("");
+  }
+  function kpiLLM(c, R) {
+    var p = R.prefill, d = R.decode;
+    paintKPI([
+      [t("kpi_gpus"), R.gpus, "DP" + c.dp + " × PP" + c.pp + " × PCP" + c.pcp + " × TP" + c.tp],
+      [t("kpi_layers"), R.dims.layersPerRank, t("n_layers_of", c.m.L, c.pp)],
+      [t("kpi_weight"), fmtB(R.weightBytesRank), t("n_perlayer", fmtB(R.weightBytesLayer))],
+      [t("kpi_kv"), fmtB(R.kvPerRank), t("n_kvdcp", fmtB(R.kvPerLayer), c.dcp)],
+      [t("kpi_pflop"), fmtF(p.flopTotal), t("n_localtok", fmtN(p.N))],
+      [t("kpi_pcomm"), fmtB(p.commTotal), t("n_flopbyte", (p.flopTotal / Math.max(1, p.commTotal)).toFixed(0))],
+      [t("kpi_dflop"), fmtF(d.flopTotal), t("n_localtok", fmtN(d.N))],
+      [t("kpi_dcomm"), fmtB(d.commTotal), t("n_flopbyte", (d.flopTotal / Math.max(1, d.commTotal)).toFixed(0))]
+    ]);
+  }
+  function kpiDiff(c, R) {
+    var D = R.dims, b = R.block;
+    paintKPI([
+      [t("kpi_gpus"), R.gpus, "TP" + c.tp + "×SP" + c.sp + "×PP" + c.pp + "×CFG" + c.cfg + "×DP" + c.dp],
+      [t("kpi_sp"), c.uly + " × " + c.ring, t("n_spdecomp") + c.sp],
+      [t("kpi_imgtok"), fmtN(D.Limg), t("n_patchtok", D.gh, D.gw, fmtN(D.NimgSp))],
+      [t("kpi_layers"), D.layersPerRank, t("n_blocks_of", c.m.L, c.pp)],
+      [t("kpi_weight"), fmtB(R.weightBytesRank), t("n_wsplit", fmtB(R.wReplBytes * D.layersPerRank), fmtB(R.wShardBytes * D.layersPerRank))],
+      [t("kpi_bflop"), fmtF(b.flopTotal), t("n_localtok", fmtN(D.Bl * (D.NimgSp + D.Ltxt)))],
+      [t("kpi_bcomm"), fmtB(b.commTotal), t("n_flopbyte", (b.flopTotal / Math.max(1, b.commTotal)).toFixed(0))],
+      [t("kpi_stepcomm"), fmtB(R.step.commTotal), t("n_gathers")],
+      [t("kpi_totflop"), fmtF(R.totalFlop), t("n_stepsblocks", c.steps, D.layersPerRank)],
+      [t("kpi_totcomm"), fmtB((b.commTotal * D.layersPerRank + R.step.commTotal) * c.steps + R.vaeComm), t("n_withvae", fmtB(R.vaeComm))],
+      [t("kpi_latent"), fmtB(R.latentBytes), D.latH + "×" + D.latW + "×" + c.m.zDim + " × " + D.branches],
+      [t("kpi_nokv"), t("kpi_nokv_v"), t("n_recompute")]
+    ]);
+  }
+
+  /* ---------- rank 网格 ---------- */
+  function rankGridLLM(c, R) {
+    var pp = c.pp, pcp = c.pcp, tp = c.tp, dcp = c.dcp, self = c.self;
+    var idx = function (r) { return { pp: Math.floor(r / (pcp * tp)), pcp: Math.floor(r / tp) % pcp, tp: r % tp }; };
+    var s = idx(self);
+    var tpG = function (r) { var q = idx(r); return q.pp === s.pp && q.pcp === s.pcp; };
+    var pcpG = function (r) { var q = idx(r); return q.pp === s.pp && q.tp === s.tp; };
+    var dcpMembers = (function () {
+      if (dcp <= 1) return [self];
+      var order = [];
+      for (var a = 0; a < pp; a++) for (var tt = 0; tt < tp; tt++) for (var p = 0; p < pcp; p++)
+        order.push(a * pcp * tp + p * tp + tt);
+      var gi = Math.floor(order.indexOf(self) / dcp);
+      return order.slice(gi * dcp, (gi + 1) * dcp);
+    })();
+    var html = "";
+    for (var a2 = 0; a2 < pp; a2++) {
+      html += '<div style="margin-bottom:.5rem"><div style="font-size:.6rem;color:var(--pe-pp);margin-bottom:.2rem">PP stage ' + a2 +
+        " · layers " + (a2 * R.dims.layersPerRank) + "–" + (Math.min(c.m.L, (a2 + 1) * R.dims.layersPerRank) - 1) +
+        '</div><div class="pe-rankgrid">';
+      for (var p2 = 0; p2 < pcp; p2++) {
+        for (var t2 = 0; t2 < tp; t2++) {
+          var r2 = a2 * pcp * tp + p2 * tp + t2, cls = ["pe-rk"];
+          if (r2 === self) cls.push("self");
+          if (tpG(r2)) cls.push("tpg");
+          if (dcpMembers.indexOf(r2) >= 0) cls.push("dcpg");
+          if (pcpG(r2)) cls.push("pcpg");
+          html += '<div class="' + cls.join(" ") + '" title="pp=' + a2 + " pcp=" + p2 + " tp=" + t2 + '"><div>' + r2 +
+            '</div><div class="t">' + p2 + "·" + t2 + "</div></div>";
+        }
+        if (pcp > 1) html += '<div style="width:.5rem"></div>';
+      }
+      html += "</div></div>";
+    }
+    $("rankgrid").innerHTML = html;
+    $("ranklegend").innerHTML =
+      '<span><i style="box-shadow:0 0 0 1px var(--pe-accent) inset"></i>' + t("lg_self") + "</span>" +
+      '<span><i style="border:1px solid var(--pe-tp)"></i>' + t("lg_tp") + "</span>" +
+      '<span><i style="box-shadow:0 0 0 2px var(--pe-dcp) inset"></i>' + t("lg_dcp") + "</span>" +
+      '<span><i style="outline:2px dashed var(--pe-pcp);outline-offset:-2px"></i>' + t("lg_pcp") + "</span>";
+    var tpList = [], pcpList = [], i;
+    for (i = 0; i < tp; i++) tpList.push(s.pp * pcp * tp + s.pcp * tp + i);
+    for (i = 0; i < pcp; i++) pcpList.push(s.pp * pcp * tp + i * tp + s.tp);
+    $("grpnote").innerHTML = "<b>rank " + self + "</b>" + zhen(" 的通信组：", " communicates with: ") +
+      "TP = [" + tpList.join(", ") + "]｜PCP = [" + pcpList.join(", ") + "]｜DCP = [" +
+      dcpMembers.slice().sort(function (x, y) { return x - y; }).join(", ") + "]<br>" +
+      (dcp > 1
+        ? zhen("DCP 组由 <code>all_ranks.transpose(-1,-2).reshape(-1, dcp)</code> 构造：<b>先沿 PCP 轴、再沿 TP 轴</b>取 " + dcp + " 个 rank。",
+          "The DCP group comes from <code>all_ranks.transpose(-1,-2).reshape(-1, dcp)</code>: it takes " + dcp + " ranks <b>along the PCP axis first, then across TP</b>.")
+        : zhen("DCP=1，KV cache 不分片，每个 rank 持有完整序列的 KV。",
+          "With DCP=1 the KV cache is not sharded; every rank holds the KV for the whole sequence."));
+  }
+  function rankGridDiff(c, R) {
+    var tp = c.tp, sp = c.sp, pp = c.pp, cfg = c.cfg, uly = c.uly, ring = c.ring, self = c.self;
+    var idx = function (r) {
+      return { tp: r % tp, sp: Math.floor(r / tp) % sp, pp: Math.floor(r / (tp * sp)) % pp, cfg: Math.floor(r / (tp * sp * pp)) % cfg };
+    };
+    var s = idx(self);
+    var sameTP = function (r) { var q = idx(r); return q.sp === s.sp && q.pp === s.pp && q.cfg === s.cfg; };
+    var sameSP = function (r) { var q = idx(r); return q.tp === s.tp && q.pp === s.pp && q.cfg === s.cfg; };
+    var sameCFG = function (r) { var q = idx(r); return q.tp === s.tp && q.sp === s.sp && q.pp === s.pp; };
+    var sameUly = function (r) { var q = idx(r); return sameSP(r) && Math.floor(q.sp / uly) === Math.floor(s.sp / uly); };
+    var sameRing = function (r) { var q = idx(r); return sameSP(r) && (q.sp % uly) === (s.sp % uly); };
+    var html = "";
+    for (var g = 0; g < cfg; g++) {
+      var mine = [];
+      for (var bi = 0; bi < R.dims.branches; bi++) if (bi % Math.min(cfg, R.dims.branches) === g % Math.min(cfg, R.dims.branches)) mine.push(bi);
+      html += '<div style="margin-bottom:.6rem"><div style="font-size:.6rem;color:var(--pe-cfg);margin-bottom:.2rem">CFG ' +
+        zhen("分支组 ", "branch group ") + g + " · " + zhen("负责分支 ", "handles branch ") +
+        (mine.length ? mine.join(", ") : zhen("（空转）", "(idle)")) + "</div>";
+      for (var a = 0; a < pp; a++) {
+        html += '<div style="font-size:.58rem;color:var(--pe-pp);margin:.2rem 0 .15rem">PP stage ' + a + " · blocks " +
+          (a * R.dims.layersPerRank) + "–" + (Math.min(c.m.L, (a + 1) * R.dims.layersPerRank) - 1) + '</div><div class="pe-rankgrid">';
+        for (var p = 0; p < sp; p++) {
+          for (var tt = 0; tt < tp; tt++) {
+            var r = g * tp * sp * pp + a * tp * sp + p * tp + tt, cls = ["pe-rk"];
+            if (r === self) cls.push("self");
+            if (sameTP(r)) cls.push("tpg");
+            if (sameSP(r)) cls.push("spg");
+            if (uly > 1 && sameUly(r)) cls.push("ulyg");
+            if (ring > 1 && sameRing(r)) cls.push("ringg");
+            if (cfg > 1 && sameCFG(r)) cls.push("cfgg");
+            html += '<div class="' + cls.join(" ") + '" title="tp=' + tt + " sp=" + p + " pp=" + a + " cfg=" + g + '"><div>' + r +
+              '</div><div class="t">u' + (p % uly) + "·r" + Math.floor(p / uly) + "</div></div>";
+          }
+          if (sp > 1) html += '<div style="width:.5rem"></div>';
+        }
+        html += "</div>";
+      }
+      html += "</div>";
+    }
+    $("rankgrid").innerHTML = html;
+    $("ranklegend").innerHTML =
+      '<span><i style="box-shadow:0 0 0 1px var(--pe-accent) inset"></i>' + t("lg_self") + "</span>" +
+      '<span><i style="border:1px solid var(--pe-tp)"></i>' + t("lg_tp") + "</span>" +
+      '<span><i style="box-shadow:0 0 0 2px var(--pe-sp) inset"></i>' + t("lg_sp") + "</span>" +
+      '<span><i style="border:2px solid var(--pe-uly)"></i>' + t("lg_uly") + "</span>" +
+      '<span><i style="outline:2px dashed var(--pe-ring);outline-offset:-2px"></i>' + t("lg_ring") + "</span>" +
+      '<span><i style="background:color-mix(in srgb,var(--pe-cfg) 30%,transparent)"></i>' + t("lg_cfg") + "</span>";
+    var mem = function (f) { var o = []; for (var i = 0; i < c.world; i++) if (f(i)) o.push(i); return o.join(", "); };
+    $("grpnote").innerHTML = "<b>rank " + self + "</b>" + zhen("：", ": ") +
+      "TP = [" + mem(sameTP) + "]｜SP = [" + mem(sameSP) + "]｜Ulysses = [" + mem(sameUly) + "]｜Ring = [" + mem(sameRing) +
+      "]｜CFG = [" + mem(sameCFG) + "]<br>" +
+      zhen("<code>sequence_parallel_size = ulysses_degree × ring_degree = " + uly + " × " + ring + " = " + sp + "</code>（<code>omni_config.py:382</code>）；<code>use_ulysses_low=True</code> ⇒ <b>Ulysses 组取 SP 组内连续块，Ring 组按步长 " + uly + " 跨块</b>。",
+        "<code>sequence_parallel_size = ulysses_degree × ring_degree = " + uly + " × " + ring + " = " + sp + "</code> (<code>omni_config.py:382</code>). With <code>use_ulysses_low=True</code>, <b>Ulysses groups are contiguous blocks inside the SP group and Ring groups stride across them with stride " + uly + "</b>.");
+  }
+
+  /* ---------- GEMM 卡片 ---------- */
+  function card(title, badge, badgeColor, desc, svg, foot, wide) {
+    return '<div class="pe-gcard' + (wide ? " wide" : "") + '"><div class="t">' + title +
+      (badge ? '<span class="badge" style="color:' + badgeColor + '">' + badge + "</span>" : "") +
+      '</div><div class="d">' + desc + "</div>" + svg + '<div class="f">' + foot + "</div></div>";
+  }
+  function gemmsLLM(c, R) {
+    var tp = c.tp, m = c.m, D = R.dims, tpRank = c.self % tp, p = R.prefill, N = p.N, out = [];
+    out.push(card("qkv_proj", zhen("ColumnParallel · TP 列切", "ColumnParallel · split by columns"), "var(--pe-tp)",
+      "W[" + m.h + ", " + ((m.H + 2 * m.Hkv) * D.D) + "] → " + zhen("每 rank", "per rank") + " [" + m.h + ", " + p.qkvOut + "]　q " + D.Hl + "×" + D.D + "｜k " + D.Hkvl + "×" + D.D + "｜v " + D.Hkvl + "×" + D.D,
+      svgGemm({ mode: "col", P: tp, self: tpRank, dim: "tp", Klab: String(m.h), Mlab: String((m.H + 2 * m.Hkv) * D.D) }),
+      "<span>" + zhen("输出按列切 → <b>无需通信</b>", "columns split cleanly → <b>no communication</b>") + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(p.flopQKV) + "</b></span>"));
+    out.push(card("o_proj", zhen("RowParallel · TP 行切", "RowParallel · split by rows"), "var(--pe-tp)",
+      "W[" + (m.H * D.D) + ", " + m.h + "] → " + zhen("每 rank", "per rank") + " [" + (D.Hl * D.D) + ", " + m.h + "]",
+      svgGemm({ mode: "row", P: tp, self: tpRank, dim: "tp", Klab: String(m.H * D.D), Mlab: String(m.h) }),
+      "<span>" + zhen("部分和 → <b>all-reduce</b> ", "partial sums → <b>all-reduce</b> ") + fmtB(AR(N * m.h, tp, c.adt)) + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(p.flopO) + "</b></span>"));
+    if (!D.isMoE) {
+      out.push(card("gate_proj / up_proj", zhen("MergedColumnParallel · TP 列切", "MergedColumnParallel · split by columns"), "var(--pe-tp)",
+        "2×W[" + m.h + ", " + m.I + "] → " + zhen("每 rank", "per rank") + " 2×[" + m.h + ", " + D.Il + "]",
+        svgGemm({ mode: "col", P: tp, self: tpRank, dim: "tp", Klab: String(m.h), Mlab: String(2 * m.I) }),
+        "<span>" + zhen("SiLU 逐元素 → <b>无需通信</b>", "SiLU is element-wise → <b>no communication</b>") + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(2 * N * m.h * 2 * D.Il) + "</b></span>"));
+      out.push(card("down_proj", zhen("RowParallel · TP 行切", "RowParallel · split by rows"), "var(--pe-tp)",
+        "W[" + m.I + ", " + m.h + "] → " + zhen("每 rank", "per rank") + " [" + D.Il + ", " + m.h + "]",
+        svgGemm({ mode: "row", P: tp, self: tpRank, dim: "tp", Klab: String(m.I), Mlab: String(m.h) }),
+        "<span>" + zhen("部分和 → <b>all-reduce</b> ", "partial sums → <b>all-reduce</b> ") + fmtB(AR(N * m.h, tp, c.adt)) + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(2 * N * D.Il * m.h) + "</b></span>"));
+    } else {
+      out.push(card("router (gate)", zhen("复制 · 无切分", "replicated · not sharded"), "var(--pe-dim)",
+        "W[" + m.h + ", " + m.E + "]　top-" + m.K,
+        svgGemm({ mode: "rep", P: 1, self: 0, dim: "tp", Klab: String(m.h), Mlab: String(m.E), noteRight: zhen("权重全复制", "weights replicated") }),
+        "<span>" + zhen("路由结果决定 token 去哪", "routing decides where each token goes") + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(2 * N * m.h * m.E) + "</b></span>"));
+      out.push(card("experts w13 / w2 ×" + D.expPerRank,
+        D.epSize > 1 ? zhen("EP 切专家 (ep_size=" + D.epSize + ")", "EP shards experts (ep_size=" + D.epSize + ")") : zhen("TP 切 intermediate", "TP shards the intermediate dim"),
+        D.epSize > 1 ? "var(--pe-ep)" : "var(--pe-tp)",
+        zhen("每 rank ", "per rank ") + D.expPerRank + zhen(" 个专家，[", " experts, [") + m.h + "→2×" + D.MIl + "]+[" + D.MIl + "→" + m.h + "]",
+        svgGemm({ mode: D.epSize > 1 ? "col" : "row", P: D.epSize > 1 ? Math.min(D.epSize, 8) : tp,
+          self: D.epSize > 1 ? c.self % Math.min(D.epSize, 8) : tpRank, dim: D.epSize > 1 ? "ep" : "tp",
+          Klab: String(m.h), Mlab: String(m.E * m.MI) }),
+        "<span>" + (D.epSize > 1 ? zhen("<b>all-to-all</b> 送 token", "<b>all-to-all</b> ships the tokens") : zhen("部分和 <b>all-reduce</b>", "partial sums → <b>all-reduce</b>")) +
+        "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(p.flopMLP - 2 * N * m.h * m.E) + "</b></span>"));
+    }
+    $("gemms").innerHTML = out.join("");
+  }
+  function gemmsDiff(c, R) {
+    var tp = c.tp, m = c.m, D = R.dims, tpRank = c.self % tp, f = R.block.f, ad = c.adt, out = [];
+    out.push(card("img_mod / txt_mod", zhen("ReplicatedLinear · <b>TP 不切</b>", "ReplicatedLinear · <b>never sharded by TP</b>"), "var(--pe-warn)",
+      "W[" + D.d + ", 6×" + D.d + "] × 2　" + zhen("作用在 temb [B, ", "applied to temb [B, ") + D.d + "]",
+      svgGemm({ mode: "rep", P: 1, self: 0, dim: "tp", Klab: String(D.d), Mlab: String(6 * D.d), noteRight: zhen("每卡完整副本", "full copy on every GPU") }),
+      '<span style="color:var(--pe-warn)">' + zhen("占单层权重的 <b>" + (R.wReplBytes / R.weightBytesLayer * 100).toFixed(0) + "%</b>，加 TP 也不会变小",
+        "<b>" + (R.wReplBytes / R.weightBytesLayer * 100).toFixed(0) + "%</b> of this layer's weights, and raising TP will not shrink it") +
+      "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(f.mod) + "</b></span>"));
+    out.push(card(zhen("to_qkv（图像流）", "to_qkv (image stream)"), zhen("QKVParallelLinear · TP 列切", "QKVParallelLinear · split by columns"), "var(--pe-tp)",
+      "W[" + D.d + ", 3×" + m.H + "×" + D.D + "] → " + zhen("每 rank", "per rank") + " [" + D.d + ", " + (3 * D.Hl * D.D) + "]　MHA: q/k/v " + D.Hl + zhen(" head", " heads"),
+      svgGemm({ mode: "col", P: tp, self: tpRank, dim: "tp", Klab: String(D.d), Mlab: String(3 * m.H * D.D) }),
+      "<span>" + zhen("无需通信", "no communication") + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(f.qkvImg) + "</b></span>"));
+    out.push(card(zhen("add_kv_proj（文本流）", "add_kv_proj (text stream)"), zhen("QKVParallelLinear · TP 列切", "QKVParallelLinear · split by columns"), "var(--pe-tp)",
+      zhen("文本侧独立的 q/k/v 投影，随后与图像流拼成 joint 序列", "a separate q/k/v projection for text, later concatenated with the image stream"),
+      svgGemm({ mode: "col", P: tp, self: tpRank, dim: "tp", Klab: String(D.d), Mlab: String(3 * m.H * D.D) }),
+      "<span>" + zhen("无需通信", "no communication") + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(f.qkvTxt) + "</b></span>"));
+    out.push(card("to_out / to_add_out", zhen("RowParallel · TP 行切", "RowParallel · split by rows"), "var(--pe-tp)",
+      "W[" + (m.H * D.D) + ", " + D.d + "] → " + zhen("每 rank", "per rank") + " [" + (D.Hl * D.D) + ", " + D.d + "]　" + zhen("图像流与文本流各一个", "one for each stream"),
+      svgGemm({ mode: "row", P: tp, self: tpRank, dim: "tp", Klab: String(m.H * D.D), Mlab: String(D.d) }),
+      "<span>" + zhen("两条流各一次 <b>all-reduce</b>：", "one <b>all-reduce</b> per stream: ") +
+      fmtB(AR(D.Bl * D.NimgSp * D.d, tp, ad)) + " + " + fmtB(AR(D.Bl * D.Ltxt * D.d, tp, ad)) +
+      "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF(f.outImg + f.outTxt) + "</b></span>"));
+    out.push(card("img_mlp.net.0 / txt_mlp.net.0", zhen("ColumnParallelApproxGELU · TP 列切", "ColumnParallelApproxGELU · split by columns"), "var(--pe-tp)",
+      "W[" + D.d + ", " + D.ff + "] → " + zhen("每 rank", "per rank") + " [" + D.d + ", " + D.ffl + "]",
+      svgGemm({ mode: "col", P: tp, self: tpRank, dim: "tp", Klab: String(D.d), Mlab: String(D.ff) }),
+      "<span>" + zhen("无需通信", "no communication") + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF((f.mlpImg + f.mlpTxt) / 2) + "</b></span>"));
+    out.push(card("img_mlp.net.2 / txt_mlp.net.2", zhen("RowParallel · TP 行切", "RowParallel · split by rows"), "var(--pe-tp)",
+      "W[" + D.ff + ", " + D.d + "] → " + zhen("每 rank", "per rank") + " [" + D.ffl + ", " + D.d + "]",
+      svgGemm({ mode: "row", P: tp, self: tpRank, dim: "tp", Klab: String(D.ff), Mlab: String(D.d) }),
+      "<span>" + zhen("两条流各一次 <b>all-reduce</b>", "one <b>all-reduce</b> per stream") + "</span><span>" + zhen("计算", "FLOPs") + " <b>" + fmtF((f.mlpImg + f.mlpTxt) / 2) + "</b></span>"));
+    $("gemms").innerHTML = out.join("");
+  }
+
+  /* ---------- attention ---------- */
+  function attnLLM(c, R) {
+    $("attnmats").innerHTML =
+      card(zhen("Prefill · Q×Kᵀ 分数矩阵", "Prefill · the Q×Kᵀ score matrix"), zhen("PCP 切 query 行", "PCP splits query rows"), "var(--pe-pcp)",
+        zhen("DualChunkSwap：每条请求切 2×PCP 块，rank r 取块 r 与块 " + (2 * c.pcp - 1) + "-r（<code>pcp_manager.py</code>）",
+          "DualChunkSwap: every request is cut into 2×PCP chunks and rank r takes chunk r plus chunk " + (2 * c.pcp - 1) + "-r (<code>pcp_manager.py</code>)"),
+        svgAttnPrefill(c, R), "") +
+      card(zhen("Decode · Q×Kᵀ 分数矩阵", "Decode · the Q×Kᵀ score matrix"), zhen("DCP 切 key 列 + 复制 head", "DCP splits key columns and replicates heads"), "var(--pe-dcp)",
+        zhen("query 只有 1 token/请求，全部代价压在 KV 的读取上", "there is a single query token per request, so the whole cost sits in reading the KV"),
+        svgAttnDecode(c, R), "");
+  }
+  function attnDiff(c, R) {
+    var D = R.dims, out = [];
+    out.push(card(zhen("joint 序列的组成与 SP 切分", "How the joint sequence is built and split by SP"), "SP", "var(--pe-sp)",
+      zhen("文本 token 复制、图像 token 按 SP 切；attention 时拼成 [txt ; img]",
+        "text tokens are replicated, image tokens are sharded by SP; attention runs on the concatenation [txt ; img]"),
+      svgJointSeq(c, R),
+      "<span>" + zhen("本 rank query 长度 <b>" + fmtN(D.Sq) + "</b>，key 长度 <b>" + fmtN(D.S) + "</b>",
+        "this rank has <b>" + fmtN(D.Sq) + "</b> queries against <b>" + fmtN(D.S) + "</b> keys") +
+      "</span><span>" + zhen("attention 计算", "attention FLOPs") + " <b>" + fmtF(R.block.f.attn) + "</b>" + zhen(" / block", " / block") + "</span>", true));
+    out.push(card(zhen("Ulysses · seq↔head 重分片", "Ulysses · reshard sequence ↔ heads"),
+      c.uly > 1 ? "ulysses_degree = " + c.uly : zhen("未启用", "not enabled"),
+      c.uly > 1 ? "var(--pe-uly)" : "var(--pe-dim)",
+      zhen("<code>all_to_all_single</code>：把「seq 被切」换成「head 被切」，换完后每 rank 看到完整序列",
+        "<code>all_to_all_single</code> trades a sequence split for a head split; afterwards each rank sees the whole sequence"),
+      svgUlysses(c, R),
+      c.uly > 1
+        ? "<span>" + zhen("每 block <b>4 次 all-to-all</b>（Q,K,V,out）", "<b>four all-to-alls</b> per block (Q, K, V, out)") + "</span><span>" +
+          zhen("共 <b>", "total <b>") + fmtB(R.block.comm.filter(function (x) { return x.d === "uly"; }).reduce(function (s, x) { return s + x.b; }, 0)) + "</b>" + t("per_rank") + "</span>"
+        : "<span>" + zhen("ulysses_degree=1，attention 不做 head 重分片", "ulysses_degree=1, so attention does no head resharding") + "</span><span></span>"));
+    out.push(card(zhen("Ring Attention · KV 环形轮转", "Ring Attention · rotate the KV"),
+      c.ring > 1 ? "ring_degree = " + c.ring : zhen("未启用", "not enabled"),
+      c.ring > 1 ? "var(--pe-ring)" : "var(--pe-dim)",
+      zhen("seq 保持切分，K/V 块沿环走 <code>world_size</code> 步（<code>ring_flash_attn.py:60</code>）",
+        "the sequence stays split while the K/V blocks travel <code>world_size</code> hops around the ring (<code>ring_flash_attn.py:60</code>)"),
+      svgRing(c, R),
+      c.ring > 1
+        ? "<span>" + zhen("每 block <b>" + (c.ring - 1) + " 步 P2P</b>，每步发 K 和 V", "<b>" + (c.ring - 1) + " P2P steps</b> per block, sending K and V each time") + "</span><span>" +
+          zhen("共 <b>", "total <b>") + fmtB(R.block.comm.filter(function (x) { return x.d === "ring"; }).reduce(function (s, x) { return s + x.b; }, 0)) + "</b>" + t("per_rank") + "</span>"
+        : "<span>" + zhen("ring_degree=1，K/V 不轮转", "ring_degree=1, so nothing rotates") + "</span><span></span>"));
+    $("attnmats").innerHTML = out.join("");
+  }
+
+  /* ---------- 时间线 ---------- */
+  function paintTL(segs, tot, flags, foot) {
+    $("tl").innerHTML = '<div class="pe-tl"><div class="track">' +
+      segs.map(function (s) { return '<div class="seg" style="width:' + (s.v / tot * 100) + "%;background:" + s.c + '" title="' + s.k + " " + fmtF(s.v) + '"></div>'; }).join("") +
+      "</div>" + flags.map(function (f) {
+        var at = Math.min(99.6, Math.max(0, f.at));
+        return '<div class="flag" style="left:' + at + "%;background:" + f.col + '"><i style="background:' + f.col + '"></i></div>' +
+          '<div class="lab" style="left:' + at + "%;color:" + f.col + '">' + f.lab + "</div>";
+      }).join("") + '</div><div style="font-size:.63rem;color:var(--pe-dim);margin-bottom:.6rem">' + foot + "</div>";
+  }
+  function timelineLLM(c, R) {
+    var ph = R[PHASE], pre = PHASE === "prefill";
+    var segs = [{ k: "qkv_proj", v: ph.flopQKV, c: "var(--pe-tp)" },
+      { k: "attn ctx", v: ph.flopAttnCtx, c: "var(--pe-dcp)" },
+      { k: "attn new", v: ph.flopAttnNew, c: "var(--pe-sp)" },
+      { k: "o_proj", v: ph.flopO, c: "var(--pe-accent)" },
+      { k: R.dims.isMoE ? "MoE" : "MLP", v: ph.flopMLP, c: "var(--pe-pp)" }];
+    var tot = segs.reduce(function (s, x) { return s + x.v; }, 0) || 1, acc = 0, cum = {};
+    segs.forEach(function (s) { acc += s.v / tot * 100; cum[s.k] = acc; });
+    var flags = [];
+    if (c.pcp > 1 && pre) flags.push({ at: cum["qkv_proj"], lab: "PCP AG(K,V)", col: "var(--pe-pcp)" });
+    if (c.dcp > 1) {
+      flags.push({ at: cum["qkv_proj"] + 0.6, lab: "DCP AG(Q)", col: "var(--pe-dcp)" });
+      flags.push({ at: cum["attn new"], lab: c.dcpbk === "ag_rs" ? "DCP AG(LSE)+RS(out)" : "DCP A2A", col: "var(--pe-dcp)" });
+    }
+    if (c.tp > 1) {
+      flags.push({ at: cum["o_proj"], lab: "TP AR", col: "var(--pe-tp)" });
+      if (!(R.dims.isMoE && R.dims.epSize > 1)) flags.push({ at: cum[R.dims.isMoE ? "MoE" : "MLP"], lab: "TP AR", col: "var(--pe-tp)" });
+    }
+    if (R.dims.isMoE && R.dims.epSize > 1) {
+      flags.push({ at: cum["o_proj"] + 2, lab: "EP A2A dispatch", col: "var(--pe-ep)" });
+      flags.push({ at: cum["MoE"], lab: "EP A2A combine", col: "var(--pe-ep)" });
+    }
+    paintTL(segs, tot, flags, zhen(
+      "横条宽度 ∝ 该算子在本 rank 的计算量；竖线 = 一次集合通信发生的位置（共 " + flags.length + " 次" + (c.pp > 1 ? " + 每 " + R.dims.layersPerRank + " 层一次 PP P2P" : "") + "）。",
+      "Bar width is proportional to this rank's FLOPs for that operator; each tick marks one collective (" + flags.length + " in total" + (c.pp > 1 ? ", plus one PP P2P every " + R.dims.layersPerRank + " layers" : "") + ")."));
+  }
+  function timelineDiff(c, R) {
+    var f = R.block.f;
+    var segs = [{ k: "mod", v: f.mod, c: "var(--pe-warn)" },
+      { k: "to_qkv", v: f.qkvImg + f.qkvTxt, c: "var(--pe-tp)" },
+      { k: "attention", v: f.attn, c: "var(--pe-sp)" },
+      { k: "to_out", v: f.outImg + f.outTxt, c: "var(--pe-accent)" },
+      { k: "mlp", v: f.mlpImg + f.mlpTxt, c: "var(--pe-pp)" }];
+    var tot = segs.reduce(function (s, x) { return s + x.v; }, 0) || 1, acc = 0, cum = {};
+    segs.forEach(function (s) { acc += s.v / tot * 100; cum[s.k] = acc; });
+    var flags = [];
+    if (c.uly > 1) flags.push({ at: cum["to_qkv"], lab: "Ulysses a2a ×3 (Q,K,V)", col: "var(--pe-uly)" });
+    if (c.ring > 1) flags.push({ at: cum["to_qkv"] + (cum["attention"] - cum["to_qkv"]) / 2, lab: "Ring P2P ×" + (c.ring - 1), col: "var(--pe-ring)" });
+    if (c.uly > 1) flags.push({ at: cum["attention"], lab: "Ulysses a2a (out)", col: "var(--pe-uly)" });
+    if (c.tp > 1) {
+      flags.push({ at: cum["to_out"], lab: "TP AR ×2", col: "var(--pe-tp)" });
+      flags.push({ at: cum["mlp"], lab: "TP AR ×2", col: "var(--pe-tp)" });
+    }
+    paintTL(segs, tot, flags, zhen(
+      "横条宽度 ∝ 该算子在本 rank 的计算量；竖线 = 一次通信（每个 block 共 " + flags.length + " 处）。此外每步还有 SP/CFG all-gather，整次生成末尾还有一次 VAE all-gather。",
+      "Bar width is proportional to this rank's FLOPs; each tick marks one collective (" + flags.length + " per block). On top of that there are the SP/CFG all-gathers once per step and a single VAE all-gather at the very end."));
+  }
+
+  /* ---------- 数据流 ---------- */
+  function mkFlow() {
+    var S = [];
+    return {
+      S: S,
+      row: function (cls, nm, sub, shape, right, tags) {
+        S.push('<div class="pe-stage ' + cls + '"><div class="nm">' + nm + (tags || "") + "<small>" + sub +
+          '</small></div><div class="sh">' + shape + '</div><div class="rt">' + right + "</div></div>");
+      },
+      comm: function (o, self, extra) {
+        S.push('<div class="pe-commbox"><div class="top"><div class="nm">' + o.k + "<small>" + o.sub +
+          '</small></div><div class="sh">' + o.n + (extra ? "<br><em>" + extra + "</em>" : "") +
+          '</div><div class="rt"><b>' + fmtB(o.b) + "</b>" + t("per_rank") + '<br><span style="font-size:.55rem">' +
+          o.P + " ranks · " + o.kind.toUpperCase() + "</span></div></div>" +
+          svgComm({ kind: o.kind, P: o.P, self: self, dim: o.d }) + "</div>");
+      },
+      arr: function () { S.push('<div class="pe-arrow"></div>'); }
+    };
+  }
+  function flowLLM(c, R) {
+    var ph = R[PHASE], pre = PHASE === "prefill", D = R.dims, m = c.m;
+    var tp = c.tp, pcp = c.pcp, dcp = c.dcp, adt = c.adt;
+    var N = ph.N, Nf = fmtN(N), tpRank = c.self % tp, dcpRank = dcpRankOf(c), pcpRank = Math.floor(c.self / tp) % pcp;
+    var F = mkFlow(), C = ph.comm;
+    var pick = function (kk, ss) { return C.filter(function (x) { return x.k.indexOf(kk) >= 0 && (!ss || x.sub.indexOf(ss) >= 0); })[0]; };
+    F.row("elem", "input_layernorm", zhen("RMSNorm · 权重全复制", "RMSNorm · weights replicated"),
+      "[" + Nf + ", " + D.h + "] <em>" + zhen("(hidden 不切)", "(hidden dim not split)") + "</em>", fmtF(4 * N * D.h),
+      '<span class="pe-tag rep">replicate</span>'); F.arr();
+    F.row("tp", "qkv_proj", zhen("ColumnParallel · 输出维切开，无通信", "ColumnParallel · output dim split, no communication"),
+      "W[" + D.h + ", " + ph.qkvOut + "] → [" + Nf + ", " + ph.qkvOut + "]<br><em>q " + D.Hl + "×" + D.D + "｜k " + D.Hkvl + "×" + D.D + "｜v " + D.Hkvl + "×" + D.D + "</em>",
+      "<b>" + fmtF(ph.flopQKV) + "</b>", '<span class="pe-tag tp">TP</span>'); F.arr();
+    if (m.qknorm) { F.row("elem", "q_norm / k_norm", zhen("Qwen3 特有的 per-head RMSNorm", "Qwen3's per-head RMSNorm"),
+      "[" + Nf + ", " + D.Hl + ", " + D.D + "]", fmtF(4 * N * (D.Hl + D.Hkvl) * D.D), ""); F.arr(); }
+    F.row("elem", "rotary_embedding", "RoPE", "[" + Nf + ", " + ((D.Hl + D.Hkvl) * D.D) + "]", fmtF(6 * N * (D.Hl + D.Hkvl) * D.D), ""); F.arr();
+    var cPcp = pick("PCP");
+    if (cPcp) { F.comm(cPcp, pcpRank, zhen("prefill 的 K/V 分散在 " + pcp + " 个 PCP rank 上，写 cache 前必须收齐",
+      "the prefill K/V is spread over " + pcp + " PCP ranks and must be gathered before the cache write")); F.arr(); }
+    F.row("elem", "reshape_and_cache", zhen("按 slot_mapping 写分页 KV cache", "write the paged KV cache by slot_mapping") +
+      (dcp > 1 ? zhen("（只写属于 dcp_rank " + dcpRank + " 的 token）", " (only tokens owned by dcp_rank " + dcpRank + ")") : ""),
+      "[" + fmtN(N * (pcp > 1 && pre ? pcp : 1)) + ", " + D.Hkvl + ", " + D.D + "] × 2",
+      zhen("写入 ", "writes ") + fmtB(N * (pcp > 1 && pre ? pcp : 1) * 2 * D.Hkvl * D.D * c.kdt / (dcp > 1 ? dcp : 1)), ""); F.arr();
+    var cQ = pick("DCP all-gather", zhen("Q 沿", "Q along"));
+    if (cQ) { F.comm(cQ, dcpRank, zhen("把 Q 沿 <b>head 维</b>拼起来：[" + Nf + ", " + D.Hl + ", " + D.D + "] → [" + Nf + ", " + (D.Hl * dcp) + ", " + D.D + "] · <code>flash_attn.py:1277</code>",
+      "concatenate Q along the <b>head dim</b>: [" + Nf + ", " + D.Hl + ", " + D.D + "] → [" + Nf + ", " + (D.Hl * dcp) + ", " + D.D + "] · <code>flash_attn.py:1277</code>")); F.arr(); }
+    F.row("attn", zhen("attention · context 部分", "attention · context part"),
+      dcp > 1 ? zhen("本地 KV 分片 = 全部 context 的 1/" + dcp, "the local KV shard is 1/" + dcp + " of the context") : zhen("完整 context KV", "the full context KV"),
+      "Q[" + Nf + ", " + (dcp > 1 ? D.Hl * dcp : D.Hl) + ", " + D.D + "] × K/V[" + fmtN(c.Sctx / (dcp > 1 ? dcp : 1)) + "/req, " + D.Hkvl + ", " + D.D + "]",
+      "<b>" + fmtF(ph.flopAttnCtx) + "</b><br>" + zhen("KV 读 ", "KV reads ") + fmtB(c.B * (c.Sctx / dcp) * D.Hkvl * D.D * 2 * c.kdt),
+      dcp > 1 ? '<span class="pe-tag dcp">DCP</span>' : ""); F.arr();
+    if (ph.flopAttnNew > 0) {
+      F.row("attn", zhen("attention · 新 token 因果部分", "attention · causal part over the new tokens"),
+        zhen("不走 DCP 路径", "does not take the DCP path"), "Q[" + Nf + ", " + D.Hl + ", " + D.D + "]",
+        "<b>" + fmtF(ph.flopAttnNew) + "</b>",
+        pcp > 1 && pre ? '<span class="pe-tag pcp">' + zhen("块 ", "chunks ") + pcpRank + " + " + (2 * pcp - 1 - pcpRank) + "</span>" : ""); F.arr();
+    }
+    var cL = pick("DCP all-gather", "LSE"), cR = pick("reduce-scatter"), cA = pick("DCP all-to-all");
+    if (cL) { F.comm(cL, dcpRank, zhen("各 rank 的 partial 结果需要 log-sum-exp 校正才能合并 · <code>cp_lse_ag_out_rs</code>",
+      "the per-rank partials need a log-sum-exp correction before they can be merged · <code>cp_lse_ag_out_rs</code>")); F.arr(); }
+    if (cR) { F.comm(cR, dcpRank, zhen("合并后的 out 沿 head 维散回", "the merged output is scattered back along the head dim")); F.arr(); }
+    if (cA) { F.comm(cA, dcpRank, zhen("<code>dcp_a2a_lse_reduce</code>：3 次 NCCL 压成 2 次",
+      "<code>dcp_a2a_lse_reduce</code> collapses three NCCL calls into two")); F.arr(); }
+    F.row("tp", "o_proj", zhen("RowParallel · 输出是部分和", "RowParallel · the output is a partial sum"),
+      "W[" + (D.Hl * D.D) + ", " + D.h + "] → partial[" + Nf + ", " + D.h + "]", "<b>" + fmtF(ph.flopO) + "</b>",
+      '<span class="pe-tag tp">TP</span>'); F.arr();
+    var ars = C.filter(function (x) { return x.kind === "ar"; });
+    if (ars[0]) { F.comm(ars[0], tpRank, zhen("行并行的必然结果：每 rank 只算了 K 维的一段",
+      "the unavoidable consequence of row parallelism: each rank covered only a slice of the K dimension")); F.arr(); }
+    F.row("elem", "residual + post_attention_layernorm", "", "[" + Nf + ", " + D.h + "]", fmtF(5 * N * D.h), ""); F.arr();
+    if (!D.isMoE) {
+      F.row("tp", "gate_proj / up_proj", "MergedColumnParallel", "2×W[" + D.h + ", " + D.Il + "] → [" + Nf + ", 2×" + D.Il + "]",
+        "<b>" + fmtF(2 * N * D.h * 2 * D.Il) + "</b>", '<span class="pe-tag tp">TP</span>'); F.arr();
+      F.row("elem", "SiLU × mul", zhen("逐元素", "element-wise"), "[" + Nf + ", " + D.Il + "]", fmtF(5 * N * D.Il), ""); F.arr();
+      F.row("tp", "down_proj", "RowParallel", "W[" + D.Il + ", " + D.h + "] → partial[" + Nf + ", " + D.h + "]",
+        "<b>" + fmtF(2 * N * D.Il * D.h) + "</b>", '<span class="pe-tag tp">TP</span>'); F.arr();
+      if (ars[1]) { F.comm(ars[1], tpRank, ""); F.arr(); }
+    } else {
+      F.row("tp", "router (gate)", "top-" + m.K + " / " + m.E, "[" + Nf + ", " + D.h + "] → [" + Nf + ", " + m.E + "]", fmtF(2 * N * D.h * m.E), ""); F.arr();
+      var dsp = C.filter(function (x) { return x.sub === "dispatch"; })[0], cmb = C.filter(function (x) { return x.sub === "combine"; })[0];
+      if (dsp) { F.comm(dsp, 0, zhen("按路由结果把 token 发到持有对应专家的 rank", "route each token to the rank that owns its expert")); F.arr(); }
+      F.row("tp", "experts ×" + D.expPerRank,
+        D.epSize > 1 ? zhen("本 rank 独占这些专家", "this rank owns these experts outright") : zhen("intermediate 被 TP 切", "the intermediate dim is split by TP"),
+        "[tokens, " + D.h + "] → [·, 2×" + D.MIl + "] → [·, " + D.h + "]", "<b>" + fmtF(ph.flopMLP - 2 * N * D.h * m.E) + "</b>",
+        D.epSize > 1 ? '<span class="pe-tag ep">EP</span>' : '<span class="pe-tag tp">TP</span>'); F.arr();
+      if (cmb) { F.comm(cmb, 0, zhen("把专家输出送回 token 原本所在的 rank", "send each expert's output back to the token's home rank")); F.arr(); }
+      else if (ars[1]) { F.comm(ars[1], tpRank, ""); F.arr(); }
+    }
+    F.row("elem", "residual", zhen("本层输出", "layer output"), "[" + Nf + ", " + D.h + "]", fmtF(N * D.h), "");
+    var pp2 = C.filter(function (x) { return x.kind === "p2p"; })[0];
+    if (pp2) { F.arr(); F.comm(pp2, 0, zhen("每 " + D.layersPerRank + " 层才发生一次", "happens once every " + D.layersPerRank + " layers")); }
+    $("flow").innerHTML = F.S.join("");
+  }
+  function flowDiff(c, R) {
+    var D = R.dims, f = R.block.f, C = R.block.comm, tp = c.tp, uly = c.uly, ring = c.ring;
+    var tpRank = c.self % tp, spR = spRankOf(c), uR = uly > 1 ? spR % uly : 0, rR = ring > 1 ? Math.floor(spR / uly) % ring : 0;
+    var selfOf = function (d) { return d === "tp" ? tpRank : (d === "uly" ? uR : (d === "ring" ? rR : (d === "sp" ? spR : 0))); };
+    var F = mkFlow(), Ni = fmtN(D.Bl * D.NimgSp), Nt = fmtN(D.Bl * D.Ltxt);
+    F.row("elem", "img_mod / txt_mod", zhen("SiLU + ReplicatedLinear，从 timestep embedding 出 6 组调制参数",
+      "SiLU + ReplicatedLinear, producing six modulation parameters from the timestep embedding"),
+      "temb [" + D.Bl + ", " + D.d + "] → [" + D.Bl + ", 6×" + D.d + "] ×2",
+      fmtF(f.mod) + "<br>" + zhen("权重 ", "weights ") + fmtB(R.wReplBytes) + ' <b style="color:var(--pe-warn)">' + zhen("不随 TP 缩小", "never shrinks with TP") + "</b>",
+      '<span class="pe-tag rep">replicate</span>'); F.arr();
+    F.row("elem", "img_norm1 / txt_norm1", "AdaLayerNorm: x·(1+scale)+shift",
+      "[" + Ni + ", " + D.d + "] / [" + Nt + ", " + D.d + "]", fmtF(4 * D.Bl * (D.NimgSp + D.Ltxt) * D.d), ""); F.arr();
+    F.row("tp", zhen("to_qkv（图像流）", "to_qkv (image stream)"), zhen("QKVParallelLinear · 列并行", "QKVParallelLinear · column parallel"),
+      "[" + Ni + ", " + D.d + "] → q/k/v " + zhen("各", "each") + " [" + Ni + ", " + D.Hl + ", " + D.D + "]",
+      "<b>" + fmtF(f.qkvImg) + "</b>", '<span class="pe-tag tp">TP</span>'); F.arr();
+    F.row("txts", zhen("add_kv_proj（文本流）", "add_kv_proj (text stream)"), zhen("文本侧独立 qkv 投影", "the text stream's own qkv projection"),
+      "[" + Nt + ", " + D.d + "] → q/k/v " + zhen("各", "each") + " [" + Nt + ", " + D.Hl + ", " + D.D + "]",
+      "<b>" + fmtF(f.qkvTxt) + "</b>", '<span class="pe-tag tp">TP</span>'); F.arr();
+    F.row("elem", "norm_q / norm_k + RoPE", zhen("per-head RMSNorm；图像用 3D RoPE、文本用 1D",
+      "per-head RMSNorm; 3D RoPE for the image, 1D for the text"),
+      "[" + Ni + ", " + D.Hl + ", " + D.D + "]", fmtF(10 * D.Bl * (D.NimgSp + D.Ltxt) * D.Hl * D.D), ""); F.arr();
+    var ulyC = C.filter(function (x) { return x.d === "uly"; });
+    ulyC.slice(0, 3).forEach(function (o) {
+      F.comm(o, uR, zhen("把 seq 维的分片换成 head 维的分片 · <code>_ulysses_all_to_all_any_qkv</code>",
+        "swap the sequence split for a head split · <code>_ulysses_all_to_all_any_qkv</code>")); F.arr();
+    });
+    var ringC = C.filter(function (x) { return x.d === "ring"; })[0];
+    F.row("attn", "joint attention",
+      zhen("拼接 [txt " + fmtN(D.Ltxt) + " ; img " + fmtN(D.NimgUly) + "]，非因果全矩阵",
+        "concatenate [txt " + fmtN(D.Ltxt) + " ; img " + fmtN(D.NimgUly) + "] — a full, non-causal matrix") +
+      (ring > 1 ? zhen("；K/V 沿环轮转 " + ring + " 步", "; the K/V rotates " + ring + " hops around the ring") : ""),
+      "Q[" + fmtN(D.Bl * D.Sq) + ", " + D.Hu + ", " + D.D + "] × K/V[" + fmtN(D.S) + ", " + D.Hu + ", " + D.D + "]",
+      "<b>" + fmtF(f.attn) + "</b>",
+      (uly > 1 ? '<span class="pe-tag uly">head/' + uly + "</span>" : "") + (ring > 1 ? '<span class="pe-tag ring">seq/' + ring + "</span>" : ""));
+    if (ringC) {
+      F.arr();
+      F.comm(ringC, rR, zhen("<code>for step in range(world_size): comm.send_recv(k); comm.send_recv(v)</code>（<code>ring_flash_attn.py:60</code>）。文本 K/V 作为 joint 静态前缀不参与轮转。",
+        "<code>for step in range(world_size): comm.send_recv(k); comm.send_recv(v)</code> (<code>ring_flash_attn.py:60</code>). The text K/V is a static joint prefix and never rotates."));
+    }
+    F.arr();
+    if (ulyC.length > 3) { F.comm(ulyC[3], uR, zhen("把 head 维的分片换回 seq 维 · <code>_ulysses_all_to_all_any_o</code>",
+      "swap the head split back to a sequence split · <code>_ulysses_all_to_all_any_o</code>")); F.arr(); }
+    F.row("tp", "to_out / to_add_out", zhen("RowParallel · 两条流各一个", "RowParallel · one per stream"),
+      "[" + Ni + ", " + (D.Hl * D.D) + "] → partial [" + Ni + ", " + D.d + "]", "<b>" + fmtF(f.outImg + f.outTxt) + "</b>",
+      '<span class="pe-tag tp">TP</span>'); F.arr();
+    var ars = C.filter(function (x) { return x.kind === "ar"; });
+    if (ars[0]) { F.comm(ars[0], tpRank, zhen("图像流的部分和", "the image stream's partial sum")); F.arr(); }
+    if (ars[1]) { F.comm(ars[1], tpRank, zhen("文本流的部分和", "the text stream's partial sum")); F.arr(); }
+    F.row("elem", "gate + residual", "hidden += img_gate1 × attn_out", "[" + Ni + ", " + D.d + "]",
+      fmtF(2 * D.Bl * (D.NimgSp + D.Ltxt) * D.d), ""); F.arr();
+    F.row("tp", "img_mlp / txt_mlp · net.0", "ColumnParallelApproxGELU",
+      "[" + Ni + ", " + D.d + "] → [" + Ni + ", " + D.ffl + "]", "<b>" + fmtF((f.mlpImg + f.mlpTxt) / 2) + "</b>",
+      '<span class="pe-tag tp">TP</span>'); F.arr();
+    F.row("tp", "img_mlp / txt_mlp · net.2", "RowParallel",
+      "[" + Ni + ", " + D.ffl + "] → partial [" + Ni + ", " + D.d + "]", "<b>" + fmtF((f.mlpImg + f.mlpTxt) / 2) + "</b>",
+      '<span class="pe-tag tp">TP</span>'); F.arr();
+    if (ars[2]) { F.comm(ars[2], tpRank, zhen("图像流 MLP 的部分和", "the image MLP's partial sum")); F.arr(); }
+    if (ars[3]) { F.comm(ars[3], tpRank, zhen("文本流 MLP 的部分和", "the text MLP's partial sum")); F.arr(); }
+    F.row("elem", "gate + residual", zhen("本 block 输出（图像流 + 文本流都往下传）", "block output — both streams continue"),
+      "[" + Ni + ", " + D.d + "] / [" + Nt + ", " + D.d + "]", fmtF(2 * D.Bl * (D.NimgSp + D.Ltxt) * D.d), "");
+    var pp2 = C.filter(function (x) { return x.kind === "p2p"; })[0];
+    if (pp2) { F.arr(); F.comm(pp2, 0, zhen("每 " + D.layersPerRank + " 个 block 才发生一次", "happens once every " + D.layersPerRank + " blocks")); }
+    R.step.comm.forEach(function (o) {
+      F.arr();
+      F.comm(o, selfOf(o.d), o.d === "sp"
+        ? zhen('<code>_sp_plan["proj_out"] = SequenceParallelOutput(gather_dim=1)</code>：' + D.layersPerRank + " 个 block 跑完、每步只做一次",
+          '<code>_sp_plan["proj_out"] = SequenceParallelOutput(gather_dim=1)</code> — once per step, after all ' + D.layersPerRank + " blocks")
+        : zhen("每 rank 只算了自己负责的分支，需要互换后才能做 CFG 组合 · <code>cfg_parallel.py</code>；每步一次",
+          "each rank computed only its own branch, so they must be exchanged before the CFG combine · <code>cfg_parallel.py</code>; once per step"));
+    });
+    if (R.vaeComm > 0) {
+      F.arr();
+      F.comm({ k: "VAE-P all-gather", sub: zhen("各 rank 解码的图像块收齐", "gather the image blocks each rank decoded"),
+        d: "vae", P: D.vaeEff, kind: "ag", b: R.vaeComm, n: "[3, " + c.imh + "/" + D.vaeEff + ", " + c.imw + "] × " + D.vaeEff },
+        Math.min(c.self, D.vaeEff - 1),
+        zhen("每个 rank 解码一块 latent（带 halo 重叠），裁到 core 后 all-gather · <code>vae_patch_parallel.py:_distributed_patch_decode</code>。<b>整次生成只做一次</b>，不在去噪循环里。",
+          "Each rank decodes one latent block with a halo overlap, crops to the core, then all-gathers · <code>vae_patch_parallel.py:_distributed_patch_decode</code>. This happens <b>once per image</b>, outside the denoising loop."));
+    }
+    $("flow").innerHTML = F.S.join("");
+  }
+
+  /* ---------- 表格 ---------- */
+  function tableLLM(c, R) {
+    var tp = c.tp, pcp = c.pcp, dcp = c.dcp, m = c.m, D = R.dims, p = R.prefill, d = R.decode, rows = [];
+    var r = function (nm, w, sp, fp, fd, cp, cd) {
+      rows.push("<tr><td>" + nm + '</td><td class="mono">' + w + '</td><td class="mono">' + sp + "</td><td>" + fp + "</td><td>" + fd + "</td><td>" + cp + "</td><td>" + cd + "</td></tr>");
+    };
+    var sum = function (x, dd) { return x.comm.filter(function (y) { return y.d === dd && !y.perStage; }).reduce(function (s, y) { return s + y.b; }, 0); };
+    rows.push('<tr class="sec"><td colspan="7">' + zhen("Attention 块", "Attention block") + "</td></tr>");
+    r("qkv_proj", "[" + D.h + ", " + ((D.Hl + 2 * D.Hkvl) * D.D) + "] " + zhen("列切", "col"), "[N, " + ((D.Hl + 2 * D.Hkvl) * D.D) + "]",
+      fmtF(p.flopQKV), fmtF(d.flopQKV), "—", "—");
+    r(zhen("attention (context)", "attention (context)"), zhen("无权重", "no weights"),
+      "Q[N, " + (D.Hl * (dcp > 1 ? dcp : 1)) + ", " + D.D + "]", fmtF(p.flopAttnCtx), fmtF(d.flopAttnCtx),
+      dcp > 1 ? fmtB(sum(p, "dcp")) : "—", dcp > 1 ? fmtB(sum(d, "dcp")) : "—");
+    r(zhen("attention (新 token)", "attention (new tokens)"), zhen("无权重", "no weights"), "Q[N, " + D.Hl + ", " + D.D + "]",
+      fmtF(p.flopAttnNew), fmtF(d.flopAttnNew), pcp > 1 ? fmtB(sum(p, "pcp")) : "—", "—");
+    r("o_proj", "[" + (D.Hl * D.D) + ", " + D.h + "] " + zhen("行切", "row"), "[N, " + D.h + "]", fmtF(p.flopO), fmtF(d.flopO),
+      tp > 1 ? fmtB(AR(p.N * D.h, tp, c.adt)) : "—", tp > 1 ? fmtB(AR(d.N * D.h, tp, c.adt)) : "—");
+    rows.push('<tr class="sec"><td colspan="7">' + (D.isMoE ? zhen("MoE 块", "MoE block") : zhen("MLP 块", "MLP block")) + "</td></tr>");
+    if (!D.isMoE) {
+      r("gate_up_proj", "2×[" + D.h + ", " + D.Il + "] " + zhen("列切", "col"), "[N, 2×" + D.Il + "]",
+        fmtF(2 * p.N * D.h * 2 * D.Il), fmtF(2 * d.N * D.h * 2 * D.Il), "—", "—");
+      r("down_proj", "[" + D.Il + ", " + D.h + "] " + zhen("行切", "row"), "[N, " + D.h + "]",
+        fmtF(2 * p.N * D.Il * D.h), fmtF(2 * d.N * D.Il * D.h),
+        tp > 1 ? fmtB(AR(p.N * D.h, tp, c.adt)) : "—", tp > 1 ? fmtB(AR(d.N * D.h, tp, c.adt)) : "—");
+    } else {
+      r("router", "[" + D.h + ", " + m.E + "] " + zhen("复制", "replicated"), "[N, " + m.E + "]",
+        fmtF(2 * p.N * D.h * m.E), fmtF(2 * d.N * D.h * m.E), "—", "—");
+      r("experts ×" + D.expPerRank, "3×[" + D.h + ", " + D.MIl + "]", "[N×top" + m.K + ", " + D.h + "]",
+        fmtF(p.flopMLP - 2 * p.N * D.h * m.E), fmtF(d.flopMLP - 2 * d.N * D.h * m.E),
+        fmtB(sum(p, "ep") + sum(p, "tp") / 2), fmtB(sum(d, "ep") + sum(d, "tp") / 2));
+    }
+    rows.push('<tr class="sum"><td>' + zhen("单层合计", "Per layer") + '</td><td class="mono">' + fmtB(R.weightBytesLayer) +
+      '</td><td class="mono">P=' + fmtN(p.N) + " / D=" + fmtN(d.N) + " tok</td><td>" + fmtF(p.flopTotal) + "</td><td>" + fmtF(d.flopTotal) +
+      "</td><td>" + fmtB(p.commTotal) + "</td><td>" + fmtB(d.commTotal) + "</td></tr>");
+    rows.push('<tr class="sum"><td>' + zhen("整卡 " + D.layersPerRank + " 层", D.layersPerRank + " layers on this rank") +
+      '</td><td class="mono">' + fmtB(R.weightBytesRank) + '</td><td class="mono">KV ' + fmtB(R.kvPerRank) + "</td><td>" +
+      fmtF(p.flopTotal * D.layersPerRank) + "</td><td>" + fmtF(d.flopTotal * D.layersPerRank) + "</td><td>" +
+      fmtB(p.commTotal * D.layersPerRank) + "</td><td>" + fmtB(d.commTotal * D.layersPerRank) + "</td></tr>");
+    $("tbl").innerHTML = "<thead><tr><th>" + t("th_op") + "</th><th>" + t("th_wshard") + "</th><th>" + t("th_act") +
+      "</th><th>" + t("th_pflop") + "</th><th>" + t("th_dflop") + "</th><th>" + t("th_pcomm") + "</th><th>" + t("th_dcomm") +
+      "</th></tr></thead><tbody>" + rows.join("") + "</tbody>";
+  }
+  function tableDiff(c, R) {
+    var D = R.dims, f = R.block.f, C = R.block.comm, tp = c.tp, m = c.m, rows = [];
+    var g = function (d2) { return fmtB(C.filter(function (x) { return x.d === d2 && !x.perStage; }).reduce(function (s, x) { return s + x.b; }, 0)); };
+    var r = function (nm, w, sh, fl, cm) {
+      rows.push("<tr><td>" + nm + '</td><td class="mono">' + w + '</td><td class="mono">' + sh + "</td><td>" + fl + "</td><td>" + cm + "</td></tr>");
+    };
+    rows.push('<tr class="sec"><td colspan="5">' + zhen("调制（AdaLN）", "Modulation (AdaLN)") + "</td></tr>");
+    r("img_mod / txt_mod", "2×[" + D.d + ", " + (6 * D.d) + "] <b>" + zhen("复制", "replicated") + "</b>", "[" + D.Bl + ", " + (6 * D.d) + "]", fmtF(f.mod), "—");
+    rows.push('<tr class="sec"><td colspan="5">' + zhen("Attention（双流 joint）", "Attention (joint, dual-stream)") + "</td></tr>");
+    r(zhen("to_qkv（图像）", "to_qkv (image)"), "[" + D.d + ", " + (3 * D.Hl * D.D) + "] " + zhen("列切", "col"),
+      "[" + fmtN(D.Bl * D.NimgSp) + ", " + (3 * D.Hl * D.D) + "]", fmtF(f.qkvImg), "—");
+    r(zhen("add_kv_proj（文本）", "add_kv_proj (text)"), "[" + D.d + ", " + (3 * D.Hl * D.D) + "] " + zhen("列切", "col"),
+      "[" + fmtN(D.Bl * D.Ltxt) + ", " + (3 * D.Hl * D.D) + "]", fmtF(f.qkvTxt), "—");
+    r("joint attention", zhen("无权重", "no weights"),
+      "Q[" + fmtN(D.Bl * D.Sq) + ", " + D.Hu + ", " + D.D + "] × K[" + fmtN(D.S) + ", …]", fmtF(f.attn),
+      ((c.uly > 1 ? "Ulysses " + g("uly") : "") + (c.uly > 1 && c.ring > 1 ? " + " : "") + (c.ring > 1 ? "Ring " + g("ring") : "")) || "—");
+    r("to_out / to_add_out", "2×[" + (D.Hl * D.D) + ", " + D.d + "] " + zhen("行切", "row"), "[·, " + D.d + "]",
+      fmtF(f.outImg + f.outTxt),
+      tp > 1 ? fmtB(AR(D.Bl * D.NimgSp * D.d, tp, c.adt) + AR(D.Bl * D.Ltxt * D.d, tp, c.adt)) : "—");
+    rows.push('<tr class="sec"><td colspan="5">FeedForward</td></tr>');
+    r("net.0 (GELU)", "2×[" + D.d + ", " + D.ffl + "] " + zhen("列切", "col"), "[·, " + D.ffl + "]", fmtF((f.mlpImg + f.mlpTxt) / 2), "—");
+    r("net.2", "2×[" + D.ffl + ", " + D.d + "] " + zhen("行切", "row"), "[·, " + D.d + "]", fmtF((f.mlpImg + f.mlpTxt) / 2),
+      tp > 1 ? fmtB(AR(D.Bl * D.NimgSp * D.d, tp, c.adt) + AR(D.Bl * D.Ltxt * D.d, tp, c.adt)) : "—");
+    rows.push('<tr class="sum"><td>' + zhen("单 block 合计", "Per block") + '</td><td class="mono">' + fmtB(R.weightBytesLayer) +
+      '</td><td class="mono">img ' + fmtN(D.NimgSp) + " + txt " + fmtN(D.Ltxt) + " tok</td><td>" + fmtF(R.block.flopTotal) +
+      "</td><td>" + fmtB(R.block.commTotal) + "</td></tr>");
+    rows.push('<tr class="sum"><td>' + zhen("一个去噪步（" + D.layersPerRank + " block）", "One denoising step (" + D.layersPerRank + " blocks)") +
+      '</td><td class="mono">—</td><td class="mono">+ SP/CFG all-gather</td><td>' + fmtF(R.step.flop) + "</td><td>" +
+      fmtB(R.block.commTotal * D.layersPerRank + R.step.commTotal) + "</td></tr>");
+    rows.push('<tr class="sum"><td>' + zhen("整次生成（" + c.steps + " 步 + VAE）", "Whole image (" + c.steps + " steps + VAE)") +
+      '</td><td class="mono">' + fmtB(R.weightBytesRank) + '</td><td class="mono">latent ' + fmtB(R.latentBytes) + "</td><td>" +
+      fmtF(R.totalFlop) + "</td><td>" + fmtB((R.block.commTotal * D.layersPerRank + R.step.commTotal) * c.steps + R.vaeComm) + "</td></tr>");
+    $("tbl").innerHTML = "<thead><tr><th>" + t("th_op") + "</th><th>" + t("th_wshard") + "</th><th>" + t("th_act") +
+      "</th><th>" + t("th_flop") + "</th><th>" + t("th_comm") + "</th></tr></thead><tbody>" + rows.join("") + "</tbody>";
+  }
+
+  /* ---------- 条形图 ---------- */
+  function mkBars(items, fmt) {
+    var max = Math.max.apply(null, items.map(function (i) { return i.v; }).concat([1]));
+    return items.map(function (i) {
+      return '<div class="pe-bar"><div>' + i.k + '</div><div class="track"><div class="fill" style="width:' +
+        Math.max(0.4, i.v / max * 100) + "%;background:" + i.c + '"></div></div><div class="val">' + fmt(i.v) + "</div></div>";
+    }).join("");
+  }
+  function barsLLM(c, R) {
+    var F = [];
+    [["prefill", "P"], ["decode", "D"]].forEach(function (pr) {
+      var x = R[pr[0]], lbl = pr[1];
+      F.push({ k: lbl + " · qkv_proj", v: x.flopQKV, c: "var(--pe-tp)" },
+        { k: lbl + " · attn context", v: x.flopAttnCtx, c: "var(--pe-dcp)" },
+        { k: lbl + " · attn " + zhen("新 token", "new tokens"), v: x.flopAttnNew, c: "var(--pe-sp)" },
+        { k: lbl + " · o_proj", v: x.flopO, c: "var(--pe-accent)" },
+        { k: lbl + " · " + (R.dims.isMoE ? "MoE" : "MLP"), v: x.flopMLP, c: "var(--pe-pp)" });
+    });
+    $("flopbars").innerHTML = mkBars(F, fmtF);
+    var CC = [];
+    [["prefill", "P"], ["decode", "D"]].forEach(function (pr) {
+      R[pr[0]].comm.forEach(function (x) {
+        CC.push({ k: pr[1] + " · " + x.k + " (" + x.sub + ")", v: x.b, c: "var(--pe-" + x.d + ")" });
+      });
+    });
+    $("commbars").innerHTML = CC.length ? mkBars(CC, fmtB) : '<div class="pe-note">' + t("no_comm") + "</div>";
+  }
+  function barsDiff(c, R) {
+    var f = R.block.f;
+    var F = [{ k: "img_mod / txt_mod", v: f.mod, c: "var(--pe-warn)" },
+      { k: zhen("to_qkv（图像）", "to_qkv (image)"), v: f.qkvImg, c: "var(--pe-tp)" },
+      { k: zhen("add_kv_proj（文本）", "add_kv_proj (text)"), v: f.qkvTxt, c: "var(--pe-txt)" },
+      { k: "joint attention", v: f.attn, c: "var(--pe-sp)" },
+      { k: zhen("to_out（图像）", "to_out (image)"), v: f.outImg, c: "var(--pe-accent)" },
+      { k: zhen("to_add_out（文本）", "to_add_out (text)"), v: f.outTxt, c: "var(--pe-cfg)" },
+      { k: "img_mlp", v: f.mlpImg, c: "var(--pe-pp)" },
+      { k: "txt_mlp", v: f.mlpTxt, c: "var(--pe-dp)" }];
+    $("flopbars").innerHTML = mkBars(F, fmtF) + '<div class="pe-note" style="margin-top:.6rem">' + zhen(
+      "单个 MMDiT block、单 rank。文本流的 token 数是<b>复制</b>的（" + fmtN(c.Ltxt) + "），图像流被 SP 切成 " + fmtN(R.dims.NimgSp) + " —— SP 越大，文本流的相对开销越显眼。",
+      "One MMDiT block on one rank. The text stream's " + fmtN(c.Ltxt) + " tokens are <b>replicated</b> while the image stream is split by SP down to " + fmtN(R.dims.NimgSp) + " — the larger SP gets, the more the text stream stands out.") + "</div>";
+    var CC = R.block.comm.map(function (x) { return { k: zhen("每层 · ", "per layer · ") + x.k + "（" + x.sub + "）", v: x.b, c: "var(--pe-" + x.d + ")" }; })
+      .concat(R.step.comm.map(function (x) { return { k: zhen("每步 · ", "per step · ") + x.k + "（" + x.sub + "）", v: x.b, c: "var(--pe-" + x.d + ")" }; }));
+    if (R.vaeComm > 0) CC.push({ k: zhen("整次一遍 · VAE-P all-gather", "once per image · VAE-P all-gather"), v: R.vaeComm, c: "var(--pe-vae)" });
+    $("commbars").innerHTML = CC.length ? mkBars(CC, fmtB) : '<div class="pe-note">' + t("no_comm") + "</div>";
+  }
+
+  /* ---------- 扫描 ---------- */
+  function sweep(c) {
+    var isD = c.cls === "diffusion";
+    var dims = isD
+      ? [["tp", "TP", "tp"], ["uly", "Ulysses", "uly"], ["ring", "Ring", "ring"], ["cfg", "CFG-P", "cfg"], ["pp", "PP", "pp"], ["vae", "VAE-P", "vae"]]
+      : [["tp", "TP", "tp"], ["pcp", "PCP", "pcp"], ["dcp", "DCP", "dcp"], ["pp", "PP", "pp"]];
+    var html = "<thead><tr><th>" + t("th_dim") + "</th><th>" + t("th_valid") + "</th>" +
+      (isD ? "<th>" + t("th_bflop") + "</th><th>" + t("th_bcomm") + "</th><th>" + t("th_tflop") + "</th><th>" + t("th_tcomm") + "</th>"
+           : "<th>" + t("th_pflop") + "</th><th>" + t("th_dflop") + "</th><th>" + t("th_pcomm") + "</th><th>" + t("th_dcomm") + "</th>") +
+      "</tr></thead><tbody>";
+    dims.forEach(function (row) {
+      var key = row[0], lbl = row[1], cv = row[2];
+      var ok = [], a1 = [], a2 = [], a3 = [], a4 = [];
+      DIMS.forEach(function (v) {
+        var cc = {}; for (var k in c) cc[k] = c[k];
+        cc[key] = v; cc.self = 0;
+        if (isD) { cc.sp = cc.uly * cc.ring; cc.world = cc.tp * cc.sp * cc.pp * cc.cfg * cc.dp; }
+        else cc.world = cc.pp * cc.tp * cc.pcp;
+        if (validate(cc).some(function (e) { return e[0] === "err"; })) {
+          ok.push(false); a1.push(null); a2.push(null); a3.push(null); a4.push(null); return;
+        }
+        ok.push(true);
+        if (isD) {
+          var RR = computeDiff(cc);
+          a1.push(RR.block.flopTotal); a2.push(RR.block.commTotal); a3.push(RR.totalFlop);
+          a4.push((RR.block.commTotal * RR.dims.layersPerRank + RR.step.commTotal) * cc.steps + RR.vaeComm);
+        } else {
+          var RL = compute(cc);
+          a1.push(RL.prefill.flopTotal); a2.push(RL.decode.flopTotal);
+          a3.push(RL.prefill.commTotal); a4.push(RL.decode.commTotal);
+        }
+      });
+      var mini = function (arr, fm) {
+        return '<td style="font-size:.58rem;color:var(--pe-dim)">' + DIMS.map(function (d, i) {
+          return arr[i] == null ? "<div>" + d + ": —</div>"
+            : "<div" + (d === c[key] ? ' style="color:var(--pe-fg);font-weight:700"' : "") + ">" + d + ": " + fm(arr[i]) + "</div>";
+        }).join("") + "</td>";
+      };
+      var f1 = fmtF, f2 = isD ? fmtB : fmtF, f3 = isD ? fmtF : fmtB, f4 = fmtB;
+      html += '<tr><td style="color:var(--pe-' + cv + ');font-weight:700">' + lbl + '</td><td style="font-size:.58rem">' +
+        DIMS.map(function (d, i) { return '<div style="color:' + (ok[i] ? "var(--pe-ok)" : "var(--pe-dim)") + '">' + d + ": " + (ok[i] ? "✓" : "✕") + "</div>"; }).join("") +
+        "</td>" + mini(a1, f1) + mini(a2, f2) + mini(a3, f3) + mini(a4, f4) + "</tr>";
+    });
+    html += "</tbody>";
+    $("sweep").innerHTML = '<div class="pe-tblwrap"><table class="pe-t">' + html + '</table></div><div class="pe-note" style="margin-top:.5rem">' + t("sw_foot") + "</div>";
+  }
+
+  /* ---------- 说明 ---------- */
+  function notesLLM(c, R) {
+    var m = c.m, tp = c.tp, dcp = c.dcp;
+    var pills = '<div style="margin-top:.7rem"><span class="pe-pill">' + esc(modelLabel(c.name)) + '</span><span class="pe-pill">' +
+      esc(modelNote(MODELS_LLM[c.name])) + '</span><span class="pe-pill">h=' + m.h + " · H=" + m.H + " · Hkv=" + m.Hkv +
+      " · D=" + m.D + (m.E ? " · E=" + m.E + " topk=" + m.K : " · I=" + m.I) + " · L=" + m.L + "</span></div>";
+    if (L === "en") return "" +
+      "<b>1 · Rank layout and how the groups are built</b><ul>" +
+      "<li>The global order is <code>ExternalDP × DP × PP × PCP × TP</code> and <code>world_size = PP × TP × PCP</code>. <b>PCP grows the process count; DCP does not</b> — it reuses existing ranks.</li>" +
+      "<li>The DCP group is <code>transpose(-1,-2)</code> then " + dcp + " consecutive ranks: it fills the PCP axis first and only then crosses TP.</li>" +
+      "<li>Constraints: with PCP=1, <code>tp % dcp == 0</code>; with PCP&gt;1, <code>dcp ∈ {1, PCP, TP×PCP}</code>; PCP and DP are mutually exclusive.</li></ul>" +
+      "<b>2 · TP: column parallel is free, row parallel is not</b><ul>" +
+      "<li>Column parallel cuts the output dimension, so each rank produces a disjoint slice of the result and nothing needs to be exchanged. Row parallel cuts the input dimension, so every rank ends up with a <b>partial sum</b> that must be all-reduced.</li>" +
+      "<li>When there are fewer KV heads than TP ranks they get replicated (<code>max(1, Hkv // tp)</code>). This model has Hkv=" + m.Hkv + ", so beyond TP=" + m.Hkv + " extra tensor parallelism no longer shrinks the KV cache.</li>" +
+      "<li>All-reduce volume is <code>2(P−1)/P · N · h</code>, essentially independent of TP. The larger TP grows, the less each rank computes and the more communication dominates.</li></ul>" +
+      "<b>3 · PCP splits the rows of the score matrix</b><ul>" +
+      "<li>Query rows are cut into <code>2×PCP</code> chunks and rank r takes chunk r together with chunk (2·PCP−1−r). Under a causal mask the early chunks have few active cells and the late ones have many, so pairing a head with a tail is what makes the load even.</li>" +
+      "<li>Each layer all-gathers K/V before writing the cache, so <b>PCP does not reduce KV cache</b> — it replicates it PCP times. Decode requests are replicated as well.</li></ul>" +
+      "<b>4 · DCP splits the columns and replicates the heads</b><ul>" +
+      "<li>Key columns are interleaved by <code>(token_idx / interleave) % dcp</code>. Q is all-gathered along the head dimension so each rank computes every head of its group against its own key shard.</li>" +
+      "<li><b>DCP does not reduce attention FLOPs</b> — heads ×dcp and keys ÷dcp leave the area unchanged. What it buys is KV memory and KV read bandwidth divided by dcp, which is exactly the bottleneck during decode.</li></ul>" +
+      "<b>5 · Conventions</b><ul>" +
+      "<li>GEMMs are counted as <code>2·M·K·N</code>; attention as <code>4 × active (q,k) pairs × heads × head_dim</code>.</li>" +
+      "<li>Collectives use the ring cost per rank: all-reduce <code>2(P−1)/P·n</code>, all-gather and reduce-scatter <code>(P−1)·n</code>, all-to-all <code>(P−1)/P·n</code>.</li></ul>" + pills;
+    return "" +
+      "<b>1 · rank 布局与组的构造</b><ul>" +
+      "<li>顺序 <code>ExternalDP × DP × PP × PCP × TP</code>，<code>world_size = PP × TP × PCP</code>；<b>PCP 撑大进程数，DCP 不会</b>。</li>" +
+      "<li>DCP 组 = <code>transpose(-1,-2)</code> 后连续取 " + dcp + " 个 —— 先吃满 PCP 轴再跨 TP 轴。</li>" +
+      "<li>约束：PCP=1 时 <code>tp % dcp == 0</code>；PCP&gt;1 时 <code>dcp ∈ {1, PCP, TP×PCP}</code>；PCP 与 DP 互斥。</li></ul>" +
+      "<b>2 · TP：列并行不通信，行并行必通信</b><ul>" +
+      "<li>列并行按输出维竖切，各 rank 输出不重叠 → 零通信；行并行按输入维横切，得到<b>部分和</b> → 必须 all-reduce。</li>" +
+      "<li>KV heads 不足 TP 时被复制（<code>max(1, Hkv // tp)</code>），本模型 Hkv=" + m.Hkv + "，TP&gt;" + m.Hkv + " 后加 TP 不再减少 KV cache。</li>" +
+      "<li>all-reduce 量 = <code>2(P−1)/P · N · h</code>，与 TP 大小几乎无关 ⇒ TP 越大通信占比越高。</li></ul>" +
+      "<b>3 · PCP：切分数矩阵的「行」</b><ul>" +
+      "<li>query 行切 <code>2×PCP</code> 块，rank r 取块 r 与块 (2·PCP−1−r)，因果 mask 下一头一尾配对才均衡。</li>" +
+      "<li>每层 all-gather K/V 后写 cache；<b>PCP 不减少 KV cache</b>，反而按 PCP 倍冗余。decode 请求被复制。</li></ul>" +
+      "<b>4 · DCP：切分数矩阵的「列」，同时复制「head」</b><ul>" +
+      "<li>key 列按 <code>(token_idx / interleave) % dcp</code> 交错分片；Q 沿 head 维 all-gather 后本 rank 算全组 head。</li>" +
+      "<li><b>DCP 不减少 attention FLOPs</b>（head ×dcp、key ÷dcp，面积不变），换来 KV 显存与读带宽 ÷ dcp。</li></ul>" +
+      "<b>5 · 口径</b><ul>" +
+      "<li>GEMM 计 <code>2·M·K·N</code>；attention 计 <code>4 × 有效 (q,k) 对数 × head 数 × head_dim</code>。</li>" +
+      "<li>环形算法：all-reduce <code>2(P−1)/P·n</code>、all-gather / reduce-scatter <code>(P−1)·n</code>、all-to-all <code>(P−1)/P·n</code>。</li></ul>" + pills;
+  }
+
+  function notesDiff(c, R) {
+    var m = c.m, uly = c.uly, ring = c.ring, sp = c.sp;
+    var replPct = R ? (R.wReplBytes / R.weightBytesLayer * 100).toFixed(0) : "?";
+    var Hl = R ? R.dims.Hl : "H/tp";
+    var pills = '<div style="margin-top:.7rem"><span class="pe-pill">' + esc(modelLabel(c.name)) + '</span><span class="pe-pill">' +
+      esc(modelNote(MODELS_DIFF[c.name])) + '</span><span class="pe-pill">dim=' + m.d + " · H=" + m.H + " · head_dim=" + m.D +
+      " · ff=" + (m.d * m.mult) + " · L=" + m.L + " · in_ch=" + m.inCh + " · patch=" + m.patch + " · VAE ÷" + m.vaeScale + "</span></div>";
+    if (L === "en") return "" +
+      "<b>1 · Rank layout: <code>tp-sp-pp-cfg-dp</code></b><ul>" +
+      "<li><code>world_size = tp × sp × pp × cfg × dp</code> (<code>diffusion/distributed/parallel_state.py:196</code>); TP is innermost, CFG is outermost apart from DP.</li>" +
+      "<li><code>sequence_parallel_size = ulysses_degree × ring_degree</code> (<code>omni_config.py:382</code>); <code>allgather_degree</code> is mutually exclusive with both.</li>" +
+      "<li>With the default <code>use_ulysses_low=True</code>, Ulysses groups are <b>contiguous blocks</b> inside the SP group and Ring groups <b>stride across</b> them with stride " + uly + ".</li>" +
+      "<li>The EP group is <code>tp-sp-cfg-dp</code>. Enabling EP on a dense model raises <code>RuntimeError(\"Expert parallelism enabled for a non-MoE model\")</code>.</li>" +
+      "<li>VAE-P is not part of world_size; it reuses existing ranks via <code>min(vae_patch_parallel_size, world_size)</code>.</li></ul>" +
+      "<b>2 · Dual-stream MMDiT: the image is split, the text is replicated</b><ul>" +
+      "<li>Every block carries <b>two complete sets</b> of norm / mod / mlp, and the streams only meet at attention where [txt ; img] is concatenated. That is why TP costs <b>four</b> all-reduces per layer here rather than the two you get in an LLM.</li>" +
+      "<li><code>_sp_plan</code> shards only the image tokens (<code>split_dim=1</code>); <b>the text tokens are a full copy on every SP rank</b>. The larger SP gets, the more that duplicated text work stands out (" + (R ? fmtN(c.Ltxt) + " text vs " + fmtN(R.dims.NimgSp) + " image tokens per rank" : "") + ").</li>" +
+      "<li><code>img_mod</code> and <code>txt_mod</code> are <b>ReplicatedLinear</b>, each <code>[" + m.d + ", 6×" + m.d + "]</code>, and are <b>never sharded by TP</b>. They account for " + replPct + "% of this layer's weights, which puts a hard floor under how much memory tensor parallelism can save.</li></ul>" +
+      "<b>3 · Two routes for sequence parallelism</b><ul>" +
+      "<li><b>Ulysses</b> issues four <code>all_to_all_single</code> calls (Q, K, V, out) to turn a sequence split into a head split. The volume is small — <code>(P−1)/P</code> of the local tensor each time — but it is <b>capped by the head count</b>: this rank holds only " + Hl + " heads, and a non-divisible count gets padded.</li>" +
+      "<li><b>Ring</b> keeps the sequence split and walks the K/V around the ring for <code>world_size</code> steps (<code>for step in range(comm.world_size): comm.send_recv(k); comm.send_recv(v)</code>), merging results online with LSE. It moves more bytes (" + (ring > 1 ? ring - 1 : 0) + " steps × 2 tensors), but the traffic is <b>P2P and overlappable</b> and it is not limited by the head count — which makes it the only option once SP gets large.</li>" +
+      "<li>The two compose: <code>SP = ulysses × ring</code>. Heads are swapped inside the Ulysses subgroup, then KV rotates between Ring subgroups.</li>" +
+      "<li>In Ring, the text K/V is a <b>static joint prefix</b> (<code>joint_key/joint_value, joint_strategy=\"front\"</code>): it participates in every step and never rotates.</li></ul>" +
+      "<b>4 · CFG-P and VAE-P operate at completely different granularities</b><ul>" +
+      "<li><b>CFG-P</b> dispatches the " + (R ? R.dims.branches : 2) + " guidance branches round-robin with <code>branch i → rank (i % n_ranks)</code> (<code>_dispatch_branches</code>). Each rank runs only its own branch, the noise predictions are all-gathered <b>once per denoising step</b>, and then every rank does the CFG combine and the scheduler step locally — deterministic, so no broadcast is needed. With only " + (R ? R.dims.branches : 2) + " branches, CFG-P beyond " + (R ? R.dims.branches : 2) + " is wasted.</li>" +
+      "<li><b>VAE-P</b> runs <b>once, at the very end</b>. Each rank decodes one latent block with a halo overlap to avoid seams, crops to the core, then all-gathers (<code>_distributed_patch_decode</code>). <code>vae_parallel_mode</code> selects <code>tile</code>, <code>spatial_shard_height</code> or <code>spatial_shard_width</code>.</li></ul>" +
+      "<b>5 · The deepest difference from an LLM</b><ul>" +
+      "<li><b>There is no KV cache.</b> Every denoising step recomputes all " + (R ? fmtN(R.dims.Limg) : "") + " image tokens from scratch, and attention is a <b>full non-causal matrix</b> rather than a lower triangle. Diffusion inference is therefore thoroughly <b>compute-bound</b>: the whole DCP/PCP family of KV-cache optimisations simply does not apply, and SP (split the sequence) plus CFG-P (split the branches) take their place.</li>" +
+      "<li>Attention is <code>O(S²)</code> while S grows with the <b>square</b> of the resolution: " + c.imh + "×" + c.imw + " gives " + (R ? fmtN(R.dims.Limg) : "") + " image tokens, i.e. <code>(H/" + (m.vaeScale * m.patch) + ")×(W/" + (m.vaeScale * m.patch) + ")</code>. Doubling each side multiplies the token count by 4 and pushes attention towards 16× — slightly under, because the " + fmtN(c.Ltxt) + " text tokens are a fixed additive term. That is the reason SP exists.</li></ul>" +
+      "<b>6 · Conventions</b><ul>" +
+      "<li>GEMMs are counted as <code>2·M·K·N</code>; joint attention as <code>4 × S_q × S_k × heads × head_dim</code> (full matrix, non-causal).</li>" +
+      "<li>Ulysses and EP all-to-alls use <code>(P−1)/P · n</code>; Ring uses <code>steps × n</code> (P2P, sent step by step); all-reduce <code>2(P−1)/P·n</code>; all-gather <code>(P−1)·n</code>.</li>" +
+      "<li>The VAE's own FLOPs and the text encoder's FLOPs are excluded — this page is about the transformer blocks.</li></ul>" + pills;
+    return "" +
+      "<b>1 · rank 布局：<code>tp-sp-pp-cfg-dp</code></b><ul>" +
+      "<li><code>world_size = tp × sp × pp × cfg × dp</code>（<code>diffusion/distributed/parallel_state.py:196</code>），TP 在最内层，CFG 在最外层（仅次于 DP）。</li>" +
+      "<li><code>sequence_parallel_size = ulysses_degree × ring_degree</code>（<code>omni_config.py:382</code>）；<code>allgather_degree</code> 与二者互斥。</li>" +
+      "<li><code>use_ulysses_low=True</code>（默认）⇒ Ulysses 组是 SP 组内的<b>连续块</b>，Ring 组按步长 " + uly + " <b>跨块</b>。</li>" +
+      "<li>EP 组 = <code>tp-sp-cfg-dp</code>；对 dense 模型开 EP 会直接抛 <code>RuntimeError(\"Expert parallelism enabled for a non-MoE model\")</code>。</li>" +
+      "<li>VAE-P 不进入 world_size，它复用已有 rank：<code>min(vae_patch_parallel_size, world_size)</code>。</li></ul>" +
+      "<b>2 · MMDiT 双流：图像流被切、文本流被复制</b><ul>" +
+      "<li>每个 block 有<b>两套完整的</b> norm / mod / mlp，attention 处才把 [txt ; img] 拼成 joint 序列一起算。因此 TP 的 all-reduce 是每层 <b>4 次</b>，不是 LLM 的 2 次。</li>" +
+      "<li><code>_sp_plan</code> 只切图像 token（<code>split_dim=1</code>），<b>文本 token 在每个 SP rank 上都是完整副本</b>。SP 越大，文本流那份重复计算的占比越突出（当前 " + fmtN(c.Ltxt) + " txt vs " + (R ? fmtN(R.dims.NimgSp) : "") + " img/rank）。</li>" +
+      "<li><code>img_mod</code> / <code>txt_mod</code> 是 <b>ReplicatedLinear</b>，各 <code>[" + m.d + ", 6×" + m.d + "]</code>，<b>TP 完全不切</b>。它们占单层权重的 " + replPct + "% —— 这意味着靠加 TP 省显存会遇到一个硬下限。</li></ul>" +
+      "<b>3 · SP 的两条路线</b><ul>" +
+      "<li><b>Ulysses</b>：4 次 <code>all_to_all_single</code>（Q、K、V、out），把「seq 切」换成「head 切」。通信量小（每次 <code>(P−1)/P × 本地张量</code>），但<b>受 head 数限制</b>：每 rank 只有 " + Hl + " 个 head，不整除时会 pad。</li>" +
+      "<li><b>Ring</b>：seq 保持切分，K/V 沿环轮转 <code>world_size</code> 步（<code>for step in range(comm.world_size): comm.send_recv(k); comm.send_recv(v)</code>），结果按 LSE 在线合并。总字节更多（" + (ring > 1 ? ring - 1 : 0) + " 步 × 2 个张量），但是 <b>P2P、可与计算 overlap</b>，且不受 head 数限制 —— 这是把 SP 推到很大时的唯一选择。</li>" +
+      "<li>两者可以叠加：<code>SP = ulysses × ring</code>，先在 ulysses 子组内换 head，再在 ring 子组间转 KV。</li>" +
+      "<li>文本的 K/V 在 Ring 里作为 <b>joint 静态前缀</b>（<code>joint_key/joint_value, joint_strategy=\"front\"</code>）每步都参与、不参与轮转。</li></ul>" +
+      "<b>4 · CFG 并行与 VAE 并行的粒度完全不同</b><ul>" +
+      "<li><b>CFG-P</b>：把 " + (R ? R.dims.branches : 2) + " 个引导分支按 <code>branch i → rank (i % n_ranks)</code> 分派（<code>_dispatch_branches</code>），每 rank 只跑自己的分支，<b>每个去噪步</b> all-gather 一次噪声预测，然后各自本地做 CFG 组合与 scheduler step（确定性，不需要 broadcast）。分支数只有 " + (R ? R.dims.branches : 2) + " 个，所以 CFG-P &gt; " + (R ? R.dims.branches : 2) + " 没有意义。</li>" +
+      "<li><b>VAE-P</b>：只在<b>整次生成的最后</b>做一次。每 rank 解码一块 latent（带 halo 重叠以避免接缝），裁到 core 后 all-gather（<code>_distributed_patch_decode</code>）；<code>vae_parallel_mode</code> 可选 <code>tile</code> / <code>spatial_shard_height</code> / <code>spatial_shard_width</code>。</li></ul>" +
+      "<b>5 · 与 LLM 最本质的差别</b><ul>" +
+      "<li><b>没有 KV cache</b>。每个去噪步都要把全部 " + (R ? fmtN(R.dims.Limg) : "") + " 个 image token 从头算一遍，而且 attention 是<b>非因果的全矩阵</b>。因此扩散推理是彻头彻尾的 <b>compute-bound</b>，DCP / PCP 那套围绕 KV cache 的优化在这里完全用不上，取而代之的是 SP（切序列）与 CFG-P（切分支）。</li>" +
+      "<li>attention 是 <code>O(S²)</code>，而 S 随分辨率<b>平方</b>增长：" + c.imh + "×" + c.imw + " → " + (R ? fmtN(R.dims.Limg) : "") + " image tokens（<code>(H/" + (m.vaeScale * m.patch) + ")×(W/" + (m.vaeScale * m.patch) + ")</code>）。边长翻倍 ⇒ token 数 ×4 ⇒ attention 趋近 ×16（因为文本那 " + fmtN(c.Ltxt) + " 个 token 是固定加项，实际倍数略低于 16）。这就是 SP 存在的理由。</li></ul>" +
+      "<b>6 · 计算量与通信量口径</b><ul>" +
+      "<li>GEMM 计 <code>2·M·K·N</code>；joint attention 计 <code>4 × S_q × S_k × head 数 × head_dim</code>（非因果，全矩阵）。</li>" +
+      "<li>Ulysses/EP 的 all-to-all 按 <code>(P−1)/P · n</code>；Ring 按 <code>steps × n</code>（P2P）；all-reduce <code>2(P−1)/P·n</code>；all-gather <code>(P−1)·n</code>。</li>" +
+      "<li>VAE 编解码器本身的 FLOPs、text encoder 的 FLOPs 未计入（本页聚焦 transformer 层）。</li></ul>" + pills;
+  }
+
+  /* ===================== 外壳与挂载 ===================== */
+  function opts(list, sel) {
+    return list.map(function (d) { return '<option value="' + d + '"' + (String(d) === String(sel) ? " selected" : "") + ">" + d + "</option>"; }).join("");
+  }
+  function shell() {
+    return SHARED_DEFS +
+      '<div class="pe-head"><div><p class="pe-eyebrow">' + t("eyebrow") + '</p>' +
+      '<h2 id="pe-title"></h2><p class="pe-lead" id="pe-lead"></p>' +
+      '<p class="pe-lead" id="pe-srcs" style="margin-top:.35rem"></p></div>' +
+      '<div class="pe-lang"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div></div>' +
+
+      '<div class="pe-panel"><div class="pe-cls">' +
+      '<div class="pe-clsbtn" data-cls="llm">' + t("cls_llm") + "</div>" +
+      '<div class="pe-clsbtn" data-cls="diffusion">' + t("cls_diff") + "</div></div>" +
+      '<div class="pe-ctl">' +
+      '<div><label>' + t("lbl_model") + '</label><select id="pe-model"></select></div>' +
+      '<div class="pe-d-tp"><label>' + t("lbl_tp") + '</label><select id="pe-tp">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-pcp pe-g-llm"><label>' + t("lbl_pcp") + '</label><select id="pe-pcp">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-dcp pe-g-llm"><label>' + t("lbl_dcp") + '</label><select id="pe-dcp">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-uly pe-g-diff"><label>' + t("lbl_uly") + '</label><select id="pe-uly">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-ring pe-g-diff"><label>' + t("lbl_ring") + '</label><select id="pe-ring">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-cfg pe-g-diff"><label>' + t("lbl_cfg") + '</label><select id="pe-cfg">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-vae pe-g-diff"><label>' + t("lbl_vae") + '</label><select id="pe-vae">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-pp"><label>' + t("lbl_pp") + '</label><select id="pe-pp">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-dp"><label>' + t("lbl_dp") + '</label><select id="pe-dp">' + opts(DIMS) + "</select></div>" +
+      '<div class="pe-d-ep"><label>' + t("lbl_ep") + '</label><select id="pe-ep"><option value="0">' + t("ep_off") + '</option><option value="1">' + t("ep_on") + "</option></select></div>" +
+      '<div><label>' + t("lbl_self") + '</label><select id="pe-self"></select></div>' +
+      "</div>" +
+
+      '<div class="pe-divider"></div>' +
+      '<div class="pe-ctl" id="pe-wl-llm">' +
+      '<div><label>' + t("lbl_bs") + '</label><input id="pe-bs" type="number" value="16" min="1"/></div>' +
+      '<div><label>' + t("lbl_sq") + '</label><input id="pe-sq" type="number" value="2048" min="1"/></div>' +
+      '<div><label>' + t("lbl_sctx") + '</label><input id="pe-sctx" type="number" value="8192" min="0"/></div>' +
+      '<div><label>' + t("lbl_kdt") + '</label><select id="pe-kdt"><option value="2">bf16 (2B)</option><option value="1">fp8 (1B)</option></select></div>' +
+      '<div><label>' + t("lbl_dcpbk") + '</label><select id="pe-dcpbk"><option value="ag_rs">' + t("dcpbk_agrs") + '</option><option value="a2a">' + t("dcpbk_a2a") + "</option></select></div>" +
+      "</div>" +
+      '<div class="pe-ctl pe-hide" id="pe-wl-diff">' +
+      '<div><label>' + t("lbl_dbs") + '</label><input id="pe-dbs" type="number" value="1" min="1"/></div>' +
+      '<div><label>' + t("lbl_imh") + '</label><input id="pe-imh" type="number" value="1328" step="16"/></div>' +
+      '<div><label>' + t("lbl_imw") + '</label><input id="pe-imw" type="number" value="1328" step="16"/></div>' +
+      '<div><label>' + t("lbl_ltxt") + '</label><input id="pe-ltxt" type="number" value="512" min="1"/></div>' +
+      '<div><label>' + t("lbl_steps") + '</label><input id="pe-steps" type="number" value="50" min="1"/></div>' +
+      '<div><label>' + t("lbl_docfg") + '</label><select id="pe-docfg"><option value="1">' + t("docfg_on") + '</option><option value="0">' + t("docfg_off") + "</option></select></div>" +
+      "</div>" +
+      '<div class="pe-ctl" style="margin-top:.5rem">' +
+      '<div><label>' + t("lbl_adt") + '</label><select id="pe-adt"><option value="2">bf16 (2B)</option><option value="1">fp8 (1B)</option></select></div>' +
+      '<div><label>' + t("lbl_wdt") + '</label><select id="pe-wdt"><option value="2">bf16 (2B)</option><option value="1">fp8 (1B)</option><option value="0.5">int4 (0.5B)</option></select></div>' +
+      "</div>" +
+      '<div id="pe-custom" class="pe-hide"><div class="pe-divider"></div>' +
+      '<div class="pe-ctl" id="pe-cust-llm">' +
+      '<div><label>hidden_size</label><input id="pe-c_h" type="number" value="5120"/></div>' +
+      '<div><label>num_attention_heads</label><input id="pe-c_H" type="number" value="64"/></div>' +
+      '<div><label>num_key_value_heads</label><input id="pe-c_Hkv" type="number" value="8"/></div>' +
+      '<div><label>head_dim</label><input id="pe-c_D" type="number" value="128"/></div>' +
+      '<div><label>intermediate_size</label><input id="pe-c_I" type="number" value="25600"/></div>' +
+      '<div><label>num_hidden_layers</label><input id="pe-c_L" type="number" value="64"/></div>' +
+      '<div><label>num_experts (0=dense)</label><input id="pe-c_E" type="number" value="0"/></div>' +
+      '<div><label>experts_per_tok</label><input id="pe-c_K" type="number" value="0"/></div>' +
+      '<div><label>moe_intermediate_size</label><input id="pe-c_MI" type="number" value="0"/></div>' +
+      "</div>" +
+      '<div class="pe-ctl pe-hide" id="pe-cust-diff">' +
+      '<div><label>dim (inner_dim)</label><input id="pe-d_d" type="number" value="3072"/></div>' +
+      '<div><label>num_attention_heads</label><input id="pe-d_H" type="number" value="24"/></div>' +
+      '<div><label>attention_head_dim</label><input id="pe-d_D" type="number" value="128"/></div>' +
+      '<div><label>ff mult</label><input id="pe-d_mult" type="number" value="4"/></div>' +
+      '<div><label>num_layers</label><input id="pe-d_L" type="number" value="60"/></div>' +
+      '<div><label>in_channels</label><input id="pe-d_in" type="number" value="64"/></div>' +
+      '<div><label>patch_size</label><input id="pe-d_ps" type="number" value="2"/></div>' +
+      '<div><label>VAE scale</label><input id="pe-d_vs" type="number" value="8"/></div>' +
+      '<div><label>latent channels</label><input id="pe-d_z" type="number" value="16"/></div>' +
+      "</div></div></div>" +
+
+      '<div id="pe-alerts"></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-scale"></div><div class="pe-kpis" id="pe-kpis"></div></div>' +
+      '<div class="pe-panel pe-g-diff pe-hide"><div class="pe-h" id="pe-h-pipeline"></div><div id="pe-pipeline"></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-rank"></div><div id="pe-rankgrid"></div>' +
+      '<div class="pe-legend" id="pe-ranklegend"></div><div id="pe-grpnote" class="pe-note" style="margin-top:.6rem"></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-gemm"></div><div class="pe-gcards" id="pe-gemms"></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-attn"></div><div class="pe-gcards" id="pe-attnmats"></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-flow"></div>' +
+      '<div class="pe-tabs pe-g-llm"><div class="pe-tab on" data-ph="prefill">' + t("tab_prefill") + "</div>" +
+      '<div class="pe-tab" data-ph="decode">' + t("tab_decode") + "</div></div>" +
+      '<div id="pe-tl"></div><div class="pe-flow" id="pe-flow"></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-table"></div><div class="pe-tblwrap"><table class="pe-t" id="pe-tbl"></table></div></div>' +
+      '<div class="pe-two"><div class="pe-panel"><div class="pe-h" id="pe-h-flop"></div><div class="pe-bars" id="pe-flopbars"></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-comm"></div><div class="pe-bars" id="pe-commbars"></div></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-sweep"></div><div id="pe-sweep"></div></div>' +
+      '<div class="pe-panel"><div class="pe-h" id="pe-h-notes"></div><div class="pe-note" id="pe-notes"></div></div>';
+  }
+
+  function snapshot() {
+    var o = {};
+    $$("select,input").forEach(function (e) { if (e.id) o[e.id] = e.value; });
+    return o;
+  }
+  function restore(o) {
+    Object.keys(o).forEach(function (id) {
+      var e = root.querySelector("#" + id);
+      if (e && o[id] !== undefined && o[id] !== "") {
+        if (e.tagName === "SELECT") {
+          for (var i = 0; i < e.options.length; i++) if (e.options[i].value === o[id]) { e.value = o[id]; return; }
+        } else e.value = o[id];
+      }
+    });
+  }
+
+  function build(keepState) {
+    var state = keepState ? snapshot() : null;
+    root.className = "pe";
+    root.innerHTML = shell();
+    if (state) restore(state);
+    $$(".pe-clsbtn").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.cls === CLS);
+      b.addEventListener("click", function () {
+        if (CLS === b.dataset.cls) return;
+        CLS = b.dataset.cls;
+        $$(".pe-clsbtn").forEach(function (x) { x.classList.toggle("on", x.dataset.cls === CLS); });
+        render();
+      });
+    });
+    $$(".pe-lang button").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.lang === L);
+      b.addEventListener("click", function () {
+        if (L === b.dataset.lang) return;
+        L = b.dataset.lang;
+        try { localStorage.setItem("pe-lang", L); } catch (e) {}
+        build(true);
+      });
+    });
+    $$(".pe-tab").forEach(function (tb) {
+      tb.classList.toggle("on", tb.dataset.ph === PHASE);
+      tb.addEventListener("click", function () {
+        $$(".pe-tab").forEach(function (x) { x.classList.remove("on"); });
+        tb.classList.add("on"); PHASE = tb.dataset.ph; render();
+      });
+    });
+    $$("select,input").forEach(function (e) {
+      e.addEventListener("change", render);
+      e.addEventListener("input", render);
+    });
+    render();
+  }
+
+  function init() {
+    root = document.getElementById("pe-root");
+    if (!root) return;
+    build(false);
+    // 跟随站点明暗主题切换重绘（SVG 里的分片色是按主题算的）
+    if (window.MutationObserver) {
+      var mo = new MutationObserver(function (recs) {
+        for (var i = 0; i < recs.length; i++) if (recs[i].attributeName === "data-md-color-scheme") { render(); return; }
+      });
+      mo.observe(document.body, { attributes: true, attributeFilter: ["data-md-color-scheme"] });
+    }
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+
+  // 便于离线单文件版与自动化测试调用
+  window.ParallelismExplorer = {
+    compute: compute, computeDiff: computeDiff, validate: validate, readCfg: readCfg,
+    render: render, setLang: function (v) { L = v; build(true); }, setCls: function (v) { CLS = v; render(); },
+    MODELS_LLM: MODELS_LLM, MODELS_DIFF: MODELS_DIFF
+  };
+})();
+
+</script>
+</body>
+</html>
