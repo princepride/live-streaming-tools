@@ -45,6 +45,7 @@ nav:
   - 互动工具:
       - 并行切分可视化 · Parallelism Explorer: parallelism_explorer/index.md
   - 中文博客:
+      - 大模型推理的内存与计算解耦：AFD 与 FastAFD: fastafd_vllm_plugin/final/blog.md
       - vLLM PCP 与 DCP 上下文并行: vllm_pcp_dcp/final/blog.md
       - vLLM Rust 前端架构演进: vllm_rust_frontend_refactor/final/blog.md
       - MiniMax-H3 与 vLLM-Omni 音视频联合生成: minimax_h3_vllm_omni/final/blog.md
@@ -57,6 +58,7 @@ nav:
       - vLLM 低比特量化实践：AutoRound: auto_round_vllm_vlm_low_bit/final/blog.md
       - GLM-5 昇腾推理优化: ascend_glm5_deployment/final/blog.md
   - English:
+      - Memory–Compute Disaggregation with AFD and FastAFD: fastafd_vllm_plugin/final/blog.en.md
       - vLLM PCP and DCP Context Parallelism: vllm_pcp_dcp/final/blog.en.md
       - Architectural Evolution of the vLLM Rust Frontend: vllm_rust_frontend_refactor/final/blog.en.md
       - Joint Audio-Video Generation with MiniMax-H3 and vLLM-Omni: minimax_h3_vllm_omni/final/blog.en.md

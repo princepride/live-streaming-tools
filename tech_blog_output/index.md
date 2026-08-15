@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">MOE SERVING · DISAGGREGATION</span>
+
+    **大模型推理的内存与计算解耦：AFD 与 FastAFD**
+
+    ---
+
+    从长上下文下 Attention 的显存压力与 MoE 的批次饥饿出发，拆解 AFD 角色重分配、双微批流水线、FastAFD GPU 优化与性能边界。
+
+    [阅读中文](fastafd_vllm_plugin/final/blog.md)
+    · [English](fastafd_vllm_plugin/final/blog.en.md)
+
 -   <span class="article-kicker">CONTEXT PARALLELISM · LONG CONTEXT</span>
 
     **vLLM PCP 与 DCP 上下文并行**

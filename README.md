@@ -23,6 +23,7 @@
 | 12 | DSpark：投机解码详解 | [BV18E3u63EdR](https://www.bilibili.com/video/BV18E3u63EdR) | [DSpark 投机解码分享](https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view) | [dspark_speculative_decoding](https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/blog/) |
 | 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](https://princepride.github.io/live-streaming-tools/kimi_k3_vllm/final/blog/) |
 | 14 | MiniMax-H3 × vLLM-Omni | [BV1xmuT6dE1M](https://www.bilibili.com/video/BV1xmuT6dE1M) | [配套资料目录](https://drive.google.com/drive/folders/18FfuwaP_OB-JRoTzlY6n-svYGnW2lBAT) | [minimax_h3_vllm_omni](https://princepride.github.io/live-streaming-tools/minimax_h3_vllm_omni/final/blog/) |
+| 15 | AFD 与 FastAFD：大模型推理的内存与计算解耦 | [BV14Jgg6iEhN](https://www.bilibili.com/video/BV14Jgg6iEhN) | [AFD Plugin 与 FastAFD 课件](https://drive.google.com/drive/folders/1vNY3v8wxM_O3X90aDlckAyok_wwJUcOX) | [fastafd_vllm_plugin](https://princepride.github.io/live-streaming-tools/fastafd_vllm_plugin/final/blog/) |
 
 ## 在线技术博客
 

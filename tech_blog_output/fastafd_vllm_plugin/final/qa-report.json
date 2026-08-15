@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16592,
+  "image_count": 7,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。",
+    "中文与英文 PDF、DOCX 均已逐页渲染并完成视觉检查。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-06.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-20.png",
+    "assets/slides/slide-33.png",
+    "assets/slides/slide-37.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\fastafd_vllm_plugin\\final\\blog.docx",
+    "size": 2720045,
+    "pass": true,
+    "paragraphs": 213,
+    "headings": 43,
+    "numbered_paragraphs": 51,
+    "tables": 12,
+    "embedded_images": 7,
+    "media_parts": 7,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "pass: 23 pages inspected"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\fastafd_vllm_plugin\\final\\blog.pdf",
+    "size": 4001032,
+    "pass": true,
+    "pages": 17,
+    "encrypted": false,
+    "embedded_image_xobjects": 7,
+    "expected_images": 7,
+    "pages_without_extractable_text": [],
+    "title": "大模型推理的内存与计算解耦：AFD 架构解析与性能验证",
+    "visual_render_qa": "pass: 17 pages inspected"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16592,
+      "translated_chars": 41196,
+      "source_images": 7,
+      "translated_images": 7,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": [
+        "40%"
+      ]
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\fastafd_vllm_plugin\\final\\blog.en.docx",
+      "size": 2720507,
+      "pass": true,
+      "paragraphs": 214,
+      "headings": 43,
+      "numbered_paragraphs": 51,
+      "tables": 12,
+      "embedded_images": 7,
+      "media_parts": 7,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "pass: 23 pages inspected"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\fastafd_vllm_plugin\\final\\blog.en.pdf",
+      "size": 3542667,
+      "pass": true,
+      "pages": 21,
+      "encrypted": false,
+      "embedded_image_xobjects": 7,
+      "expected_images": 7,
+      "pages_without_extractable_text": [],
+      "title": "Memory–Compute Disaggregation for Large-Model Inference: AFD Architecture Analysis and Performance Validation",
+      "visual_render_qa": "pass: 21 pages inspected"
+    }
+  }
+}
