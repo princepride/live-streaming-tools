@@ -215,7 +215,10 @@ def make_chapters(transcript: list[dict], duration: float, headers: dict, model:
         start_index = previous_end
         if end_index <= start_index:
             continue
-        start = round(transcript[start_index]["start"])
+        # Cover leading silence before the first recognized utterance. Speech
+        # transcription commonly starts a fraction of a second after the media,
+        # but Bilibili chapters must still begin at 00:00.
+        start = 0 if start_index == 0 else round(transcript[start_index]["start"])
         end = round(duration) if end_index == slice_count else round(transcript[end_index]["start"])
         cleaned.append({
             "start": start, "end": end,
