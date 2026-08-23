@@ -24,6 +24,7 @@
 | 13 | Day-0 Kimi K3 Support | [BV11z3m63ECo](https://www.bilibili.com/video/BV11z3m63ECo) | [Kimi K3 vLLM Tech Share](https://drive.google.com/file/d/1-oeVWJytNNXV_DuFTKxH_oo5I4bm_1Em/view) | [kimi_k3_vllm](https://princepride.github.io/live-streaming-tools/kimi_k3_vllm/final/blog/) |
 | 14 | MiniMax-H3 × vLLM-Omni | [BV1xmuT6dE1M](https://www.bilibili.com/video/BV1xmuT6dE1M) | [配套资料目录](https://drive.google.com/drive/folders/18FfuwaP_OB-JRoTzlY6n-svYGnW2lBAT) | [minimax_h3_vllm_omni](https://princepride.github.io/live-streaming-tools/minimax_h3_vllm_omni/final/blog/) |
 | 15 | AFD 与 FastAFD：大模型推理的内存与计算解耦 | [BV14Jgg6iEhN](https://www.bilibili.com/video/BV14Jgg6iEhN) | [AFD Plugin 与 FastAFD 课件](https://drive.google.com/drive/folders/1vNY3v8wxM_O3X90aDlckAyok_wwJUcOX) | [fastafd_vllm_plugin](https://princepride.github.io/live-streaming-tools/fastafd_vllm_plugin/final/blog/) |
+| 16 | Diffusion Continuous Batching 与 PiD | [BV189816ZE9C](https://www.bilibili.com/video/BV189816ZE9C) | [BilibiliShare 课件](https://drive.google.com/drive/folders/1C6PPfNhHgt0ehIO4v5AW7G2OAeRtYRoK) | [vllm_omni_diffusion_continuous_batching](https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/blog/) |
 
 ## 在线技术博客
 

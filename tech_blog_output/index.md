@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">DIFFUSION SERVING · CONTINUOUS BATCHING</span>
+
+    **vLLM-Omni Diffusion Continuous Batching 与 PiD**
+
+    ---
+
+    从同步降噪循环的阻塞问题出发，拆解 step 粒度异步调度、动态组批、异构分辨率处理、DCB 性能边界与 PiD 高分辨率解码。
+
+    [阅读中文](vllm_omni_diffusion_continuous_batching/final/blog.md)
+    · [English](vllm_omni_diffusion_continuous_batching/final/blog.en.md)
+
 -   <span class="article-kicker">MOE SERVING · DISAGGREGATION</span>
 
     **大模型推理的内存与计算解耦：AFD 与 FastAFD**

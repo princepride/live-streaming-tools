@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16365,
+  "image_count": 6,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-05.png",
+    "assets/slides/slide-06.png",
+    "assets/slides/slide-09.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_omni_diffusion_continuous_batching\\final\\blog.docx",
+    "size": 9207958,
+    "pass": true,
+    "paragraphs": 240,
+    "headings": 42,
+    "numbered_paragraphs": 58,
+    "tables": 13,
+    "embedded_images": 6,
+    "media_parts": 6,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_omni_diffusion_continuous_batching\\final\\blog.pdf",
+    "size": 12013474,
+    "pass": true,
+    "pages": 18,
+    "encrypted": false,
+    "embedded_image_xobjects": 6,
+    "expected_images": 6,
+    "pages_without_extractable_text": [],
+    "title": "vLLM-Omni 核心解析：Diffusion 异步批处理与 PiD 架构实践",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16365,
+      "translated_chars": 40113,
+      "source_images": 6,
+      "translated_images": 6,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_omni_diffusion_continuous_batching\\final\\blog.en.docx",
+      "size": 9208056,
+      "pass": true,
+      "paragraphs": 240,
+      "headings": 42,
+      "numbered_paragraphs": 58,
+      "tables": 13,
+      "embedded_images": 6,
+      "media_parts": 6,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_omni_diffusion_continuous_batching\\final\\blog.en.pdf",
+      "size": 11583383,
+      "pass": true,
+      "pages": 20,
+      "encrypted": false,
+      "embedded_image_xobjects": 6,
+      "expected_images": 6,
+      "pages_without_extractable_text": [],
+      "title": "Core Analysis of vLLM-Omni: Asynchronous Batch Processing for Diffusion and the PiD Architecture in Practice",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}
