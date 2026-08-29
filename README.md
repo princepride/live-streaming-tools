@@ -25,6 +25,7 @@
 | 14 | MiniMax-H3 × vLLM-Omni | [BV1xmuT6dE1M](https://www.bilibili.com/video/BV1xmuT6dE1M) | [配套资料目录](https://drive.google.com/drive/folders/18FfuwaP_OB-JRoTzlY6n-svYGnW2lBAT) | [minimax_h3_vllm_omni](https://princepride.github.io/live-streaming-tools/minimax_h3_vllm_omni/final/blog/) |
 | 15 | AFD 与 FastAFD：大模型推理的内存与计算解耦 | [BV14Jgg6iEhN](https://www.bilibili.com/video/BV14Jgg6iEhN) | [AFD Plugin 与 FastAFD 课件](https://drive.google.com/drive/folders/1vNY3v8wxM_O3X90aDlckAyok_wwJUcOX) | [fastafd_vllm_plugin](https://princepride.github.io/live-streaming-tools/fastafd_vllm_plugin/final/blog/) |
 | 16 | Diffusion Continuous Batching 与 PiD | [BV189816ZE9C](https://www.bilibili.com/video/BV189816ZE9C) | [BilibiliShare 课件](https://drive.google.com/drive/folders/1C6PPfNhHgt0ehIO4v5AW7G2OAeRtYRoK) | [vllm_omni_diffusion_continuous_batching](https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/blog/) |
+| 17 | Kimi K3 智能体生产级推理服务 | [BV1Wv4k6YEdB](https://www.bilibili.com/video/BV1Wv4k6YEdB/) | [Kimi-K3 Production Serving 课件](https://drive.google.com/drive/folders/1tBUR1z7j8LaEuNjAMTD3gvPU9WIhD3q8) | [kimi_k3_production_serving](https://princepride.github.io/live-streaming-tools/kimi_k3_production_serving/final/blog/) |
 
 ## 在线技术博客
 

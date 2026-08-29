@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Create balanced Bilibili-style chapters for a video or audio file."""
+"""Create balanced Bilibili-style chapters for a video or audio file.
+
+Transcription uses the shared STT backends; chapter planning can use either
+OpenRouter or an authenticated Codex CLI session.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ from pathlib import Path
 import requests
 
 import stt
+from tech_blog_pipeline import CodexClient, load_dotenv
 
 
 API_BASE = "https://openrouter.ai/api/v1"
@@ -117,9 +122,9 @@ def parse_json_content(content: str) -> dict:
         return json.loads(match.group(0))
 
 
-def make_chapters(transcript: list[dict], duration: float, headers: dict, model: str,
+def make_chapters(transcript: list[dict], duration: float, headers: dict | None, model: str,
                   min_minutes: float, max_minutes: float, max_chapters: int,
-                  max_title_chars: int) -> list[dict]:
+                  max_title_chars: int, codex_client: CodexClient | None = None) -> list[dict]:
     transcript_text = "\n".join(
         f"切片 {i} [{stamp(x['start'])} - {stamp(x['end'])}] {x['text']}"
         for i, x in enumerate(transcript)
@@ -153,50 +158,62 @@ def make_chapters(transcript: list[dict], duration: float, headers: dict, model:
 转写：
 {transcript_text}
 """
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.15,
-        "max_tokens": 5000,
-        "reasoning": {"effort": "medium", "exclude": True},
-        "provider": {"require_parameters": True},
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "bilibili_chapters",
-                "strict": True,
-                "schema": {
+    schema = {
+        "type": "object",
+        "properties": {
+            "chapters": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": max_chapters,
+                "items": {
                     "type": "object",
                     "properties": {
-                        "chapters": {
-                            "type": "array",
-                            "minItems": 1,
-                            "maxItems": max_chapters,
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "start_index": {"type": "integer", "minimum": 0, "maximum": slice_count - 1},
-                                    "end_index": {"type": "integer", "minimum": 1, "maximum": slice_count},
-                                    "title": {"type": "string", "minLength": 1, "maxLength": max_title_chars},
-                                    "summary": {"type": "string", "minLength": 1},
-                                },
-                                "required": ["start_index", "end_index", "title", "summary"],
-                                "additionalProperties": False,
-                            },
-                        }
+                        "start_index": {"type": "integer", "minimum": 0,
+                                        "maximum": slice_count - 1},
+                        "end_index": {"type": "integer", "minimum": 1,
+                                      "maximum": slice_count},
+                        "title": {"type": "string", "minLength": 1,
+                                  "maxLength": max_title_chars},
+                        "summary": {"type": "string", "minLength": 1},
                     },
-                    "required": ["chapters"],
+                    "required": ["start_index", "end_index", "title", "summary"],
                     "additionalProperties": False,
                 },
-            },
+            }
         },
+        "required": ["chapters"],
+        "additionalProperties": False,
     }
-    result = request_json(f"{API_BASE}/chat/completions", headers, payload, timeout=300)
-    try:
-        content = result["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError(f"章节接口返回异常：{json.dumps(result, ensure_ascii=False)[:500]}") from exc
-    parsed = parse_json_content(content)
+    if codex_client is not None:
+        parsed = codex_client.chat(
+            stage="video-chapters", model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=5000, reasoning="medium", temperature=0.15,
+            schema=schema,
+        )
+    else:
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.15,
+            "max_tokens": 5000,
+            "reasoning": {"effort": "medium", "exclude": True},
+            "provider": {"require_parameters": True},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "bilibili_chapters",
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+        }
+        result = request_json(f"{API_BASE}/chat/completions", headers or {}, payload, timeout=300)
+        try:
+            content = result["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"章节接口返回异常：{json.dumps(result, ensure_ascii=False)[:500]}") from exc
+        parsed = parse_json_content(content)
     chapters = parsed.get("chapters", []) if isinstance(parsed, dict) else parsed
     if not isinstance(chapters, list):
         raise RuntimeError("章节模型返回的 chapters 不是数组")
@@ -251,8 +268,10 @@ def make_chapters(transcript: list[dict], duration: float, headers: dict, model:
     return cleaned
 
 
-def write_outputs(output: Path, media: Path, duration: float, transcript: list[dict], chapters: list[dict]) -> None:
-    data = {"media": str(media.resolve()), "duration": duration, "chapters": chapters}
+def write_outputs(output: Path, media: Path, duration: float, transcript: list[dict],
+                  chapters: list[dict], metadata: dict) -> None:
+    data = {"media": str(media.resolve()), "duration": duration,
+            "metadata": metadata, "chapters": chapters}
     output.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     text_path = output.with_suffix(".txt")
     readable = [
@@ -267,7 +286,7 @@ def write_outputs(output: Path, media: Path, duration: float, transcript: list[d
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="用 OpenRouter 为视频或音频自动生成 B 站章节")
+    parser = argparse.ArgumentParser(description="为视频或音频自动生成 B 站章节")
     parser.add_argument("media", type=Path, help="视频或音频文件路径")
     parser.add_argument("-o", "--output", type=Path, help="输出 JSON 路径")
     parser.add_argument("--chunk-seconds", type=int, default=240, help="转写切片秒数（默认 240）")
@@ -282,15 +301,20 @@ def main() -> int:
                         help="转写后端（默认 openrouter，共用 stt.py）")
     parser.add_argument("--stt-model", default=DEFAULT_STT_MODEL)
     parser.add_argument("--chapter-model", default=DEFAULT_CHAPTER_MODEL)
+    parser.add_argument("--provider", choices=["openrouter", "codex"], default="openrouter",
+                        help="章节规划后端：OpenRouter API，或已登录的 Codex CLI")
+    parser.add_argument("--codex-model",
+                        help="Codex 后端模型；省略时使用 Codex CLI 当前配置的默认模型")
     args = parser.parse_args()
 
     if not args.media.is_file():
         parser.error(f"找不到媒体文件：{args.media}")
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         parser.error("需要先安装 ffmpeg，并确保 ffmpeg/ffprobe 在 PATH 中")
+    load_dotenv(Path(__file__).resolve().parent / ".env")
     api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        parser.error("请先设置环境变量 OPENROUTER_API_KEY（脚本不会读取或保存明文密钥）")
+    if args.provider == "openrouter" and not api_key:
+        parser.error("OpenRouter 章节后端需要 OPENROUTER_API_KEY（脚本不会输出明文密钥）")
     if args.chunk_seconds < 60:
         parser.error("--chunk-seconds 不能小于 60")
     if args.min_minutes <= 0 or args.max_minutes < args.min_minutes:
@@ -305,7 +329,15 @@ def main() -> int:
     safe_model = re.sub(r"[^A-Za-z0-9_.-]+", "_", args.stt_model)
     cache_dir = output.parent / f".{output.stem}_cache_{args.chunk_seconds}_{safe_model}_{args.language}_fine"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "X-Title": "Bilibili Auto Chapters"}
+    headers = ({"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+                "X-Title": "Bilibili Auto Chapters"} if api_key else None)
+    codex_client = None
+    if args.provider == "codex":
+        codex_client = CodexClient(
+            output.parent / f".{output.stem}_codex_cache",
+            Path(__file__).resolve().parent,
+            args.codex_model,
+        )
     duration = media_duration(args.media)
     log(f"媒体时长 {stamp(duration)}，开始转写（后端 {args.stt_backend}，模型 {args.stt_model}）")
     transcript = stt.transcribe(
@@ -319,8 +351,14 @@ def main() -> int:
     chapters = make_chapters(
         transcript, duration, headers, args.chapter_model,
         args.min_minutes, args.max_minutes, args.max_chapters, args.max_title_chars,
+        codex_client=codex_client,
     )
-    write_outputs(output, args.media, duration, transcript, chapters)
+    write_outputs(output, args.media, duration, transcript, chapters, {
+        "provider": args.provider,
+        "chapter_model": args.codex_model or (args.chapter_model if args.provider == "openrouter" else "configured-default"),
+        "stt_backend": args.stt_backend,
+        "stt_model": args.stt_model,
+    })
     return 0
 
 

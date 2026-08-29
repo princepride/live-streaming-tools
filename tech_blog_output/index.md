@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">AGENT SERVING · DISTRIBUTED CACHE</span>
+
+    **把缓存变成服务边界：Kimi-K3 在 vLLM 上的生产推理设计**
+
+    ---
+
+    从 Agent 负载的状态压力出发，拆解 Prefill/Decode 分离、Mooncake 分布式 KV、多模态四级缓存、KDA checkpoint、EAGLE3 与混合量化。
+
+    [阅读中文](kimi_k3_production_serving/final/blog.md)
+    · [English](kimi_k3_production_serving/final/blog.en.md)
+
 -   <span class="article-kicker">DIFFUSION SERVING · CONTINUOUS BATCHING</span>
 
     **vLLM-Omni Diffusion Continuous Batching 与 PiD**
