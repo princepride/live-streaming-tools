@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Infra 视频字幕"
+  short_description: "转录、翻译并校验 LLM 与 AI Infra 技术字幕"
+  default_prompt: "Use $transcribe-ai-infra-subtitles to create reviewed English and Chinese subtitles for this technical video."
