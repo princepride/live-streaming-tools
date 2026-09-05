@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 13486,
+  "image_count": 9,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-06.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-15.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-18.png",
+    "assets/slides/slide-19.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_model_integration\\final\\blog.docx",
+    "size": 1936736,
+    "pass": true,
+    "paragraphs": 283,
+    "headings": 24,
+    "numbered_paragraphs": 49,
+    "tables": 5,
+    "embedded_images": 9,
+    "media_parts": 9,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "unavailable_no_bundled_libreoffice"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_model_integration\\final\\blog.pdf",
+    "size": 3004963,
+    "pass": true,
+    "pages": 17,
+    "encrypted": false,
+    "embedded_image_xobjects": 9,
+    "expected_images": 9,
+    "pages_without_extractable_text": [],
+    "title": "从 Hugging Face 到 vLLM：一条可验证的模型接入链路",
+    "visual_render_qa": "pass_all_17_pages"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 13486,
+      "translated_chars": 36092,
+      "source_images": 9,
+      "translated_images": 9,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_model_integration\\final\\blog.en.docx",
+      "size": 1936874,
+      "pass": true,
+      "paragraphs": 283,
+      "headings": 24,
+      "numbered_paragraphs": 49,
+      "tables": 5,
+      "embedded_images": 9,
+      "media_parts": 9,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "unavailable_no_bundled_libreoffice"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_model_integration\\final\\blog.en.pdf",
+      "size": 2675695,
+      "pass": true,
+      "pages": 20,
+      "encrypted": false,
+      "embedded_image_xobjects": 9,
+      "expected_images": 9,
+      "pages_without_extractable_text": [],
+      "title": "From Hugging Face to vLLM: A Verifiable Model Integration Pipeline",
+      "visual_render_qa": "pass_all_20_pages"
+    }
+  }
+}

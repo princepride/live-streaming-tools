@@ -752,10 +752,13 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
 
     properties = document.core_properties
     properties.title = title
-    properties.subject = subtitle or (
+    subject = subtitle or (
         "Technical blog synthesized from a video and slide deck"
         if language == "en" else "技术视频与 PPT 整理的技术博客"
     )
+    # OOXML core-property strings are limited to 255 characters. Keep the
+    # complete subtitle on the cover while storing a safe metadata summary.
+    properties.subject = subject[:255]
     properties.author = "Technical Blog Pipeline"
     properties.keywords = "technical blog, video, PPT, AI systems"
     properties.comments = "Generated from user-provided media and slides."

@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">MODEL INTEGRATION · TENSOR PARALLELISM</span>
+
+    **从 Hugging Face 到 vLLM：一条可验证的模型接入链路**
+
+    ---
+
+    从参考实现选择开始，系统拆解运行时接口、`prefix` 命名、张量并行、权重映射、模型注册、多模态扩展与分层测试。
+
+    [阅读中文](vllm_model_integration/final/blog.md)
+    · [English](vllm_model_integration/final/blog.en.md)
+
 -   <span class="article-kicker">MODEL ARCHITECTURE · SPARSE ATTENTION</span>
 
     **从压缩注意力到可执行推理：DeepSeek V4 如何落入 vLLM**
