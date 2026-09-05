@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">REQUEST LIFECYCLE · SERVING ARCHITECTURE</span>
+
+    **从 HTTP 到下一枚 Token：vLLM 请求如何穿过三个执行边界**
+
+    ---
+
+    沿一次请求的真实因果链，拆解 API Server、Engine Core 与 GPU Worker 三个执行边界，以及调度、KV Cache、动态批处理和输出回传机制。
+
+    [阅读中文](vllm_request_journey/final/blog.md)
+    · [English](vllm_request_journey/final/blog.en.md)
+
 -   <span class="article-kicker">AGENT SERVING · DISTRIBUTED CACHE</span>
 
     **把缓存变成服务边界：Kimi-K3 在 vLLM 上的生产推理设计**
