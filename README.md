@@ -10,7 +10,7 @@
 | 期数 | 主题 | B 站视频 | PPT / 资料 | 博客 |
 |---:|---|---|---|---|
 | 1 | 如何在 vLLM 中接入一个模型 | [BV1gYL965ERP](https://www.bilibili.com/video/BV1gYL965ERP) | [vLLM 模型接入指南](https://drive.google.com/file/d/13Iqs2X1CkWLtCbtCUB5bSUPX_bsBZ6IF/view) | |
-| 2 | 大家一起来学 DeepSeek-v4 | [BV17iJF67EaY](https://www.bilibili.com/video/BV17iJF67EaY) | [vLLM DSV4 Internals](https://drive.google.com/file/d/1TtHKTRkL30DngRFmILVSTKriH9h68yJG/view) | |
+| 2 | 大家一起来学 DeepSeek-v4 | [BV17iJF67EaY](https://www.bilibili.com/video/BV17iJF67EaY) | [vLLM DSV4 Internals](https://drive.google.com/file/d/1TtHKTRkL30DngRFmILVSTKriH9h68yJG/view) | [从压缩注意力到可执行推理：DeepSeek V4 如何落入 vLLM](https://princepride.github.io/live-streaming-tools/vllm_deepseek_v4_internals/final/blog/) |
 | 3 | 一个 Request 的完整旅程 | [BV1yrJH6pEFQ](https://www.bilibili.com/video/BV1yrJH6pEFQ) | [配套资料目录](https://drive.google.com/drive/folders/19ev33HDcBC_1Cu5x78AjUWsZB33bJeox) | [从 HTTP 到下一枚 Token：vLLM 请求如何穿过三个执行边界](https://princepride.github.io/live-streaming-tools/vllm_request_journey/final/blog/) |
 | 4 | PCP 与 DCP 详解 | [BV1W1L96KEf5](https://www.bilibili.com/video/BV1W1L96KEf5) | [CP-Viz 资料目录](https://drive.google.com/drive/folders/1rB8y5eBGRJDa3SXaHo_U1FjKaeUjEeMw) | [突破长序列推理瓶颈：vLLM 分布式上下文并行架构解析](https://princepride.github.io/live-streaming-tools/vllm_pcp_dcp/final/blog/) |
 | 5 | Rust 前端重构 | [BV19fJJ6AE6W](https://www.bilibili.com/video/BV19fJJ6AE6W) | [vLLM Rust Frontend Introduction](https://drive.google.com/file/d/14cm6XyvY4dQjuBeY2pCn28macviA4PWx/view) | [突破 Python 性能瓶颈：vLLM Rust 前端架构演进与核心原理解析](https://princepride.github.io/live-streaming-tools/vllm_rust_frontend_refactor/final/blog/) |

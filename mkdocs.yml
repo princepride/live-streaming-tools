@@ -49,6 +49,7 @@ nav:
   - 互动工具:
       - 并行切分可视化 · Parallelism Explorer: parallelism_explorer/index.md
   - 中文博客:
+      - 从压缩注意力到可执行推理：DeepSeek V4 如何落入 vLLM: vllm_deepseek_v4_internals/final/blog.md
       - 从 HTTP 到下一枚 Token：vLLM 请求如何穿过三个执行边界: vllm_request_journey/final/blog.md
       - Kimi K3 智能体生产级推理服务: kimi_k3_production_serving/final/blog.md
       - vLLM-Omni Diffusion Continuous Batching 与 PiD: vllm_omni_diffusion_continuous_batching/final/blog.md
@@ -65,6 +66,7 @@ nav:
       - vLLM 低比特量化实践：AutoRound: auto_round_vllm_vlm_low_bit/final/blog.md
       - GLM-5 昇腾推理优化: ascend_glm5_deployment/final/blog.md
   - English:
+      - From Compressed Attention to Executable Inference - How DeepSeek V4 Lands in vLLM: vllm_deepseek_v4_internals/final/blog.en.md
       - From HTTP to the Next Token - How a vLLM Request Crosses Three Execution Boundaries: vllm_request_journey/final/blog.en.md
       - Production-Grade Kimi-K3 Agent Serving on vLLM: kimi_k3_production_serving/final/blog.en.md
       - vLLM-Omni Diffusion Continuous Batching and PiD: vllm_omni_diffusion_continuous_batching/final/blog.en.md

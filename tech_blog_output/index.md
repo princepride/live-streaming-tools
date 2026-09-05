@@ -21,6 +21,17 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">MODEL ARCHITECTURE · SPARSE ATTENTION</span>
+
+    **从压缩注意力到可执行推理：DeepSeek V4 如何落入 vLLM**
+
+    ---
+
+    沿模型结构、异构缓存、内存布局与双流执行的因果链，拆解 CSA、HCA、SWA、Hybrid KV Cache Manager 与 C4A Decode 的系统实现。
+
+    [阅读中文](vllm_deepseek_v4_internals/final/blog.md)
+    · [English](vllm_deepseek_v4_internals/final/blog.en.md)
+
 -   <span class="article-kicker">REQUEST LIFECYCLE · SERVING ARCHITECTURE</span>
 
     **从 HTTP 到下一枚 Token：vLLM 请求如何穿过三个执行边界**

@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 21346,
+  "image_count": 7,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-02.png",
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-05.png",
+    "assets/slides/slide-06.png",
+    "assets/slides/slide-07.png",
+    "assets/slides/slide-08.png"
+  ],
+  "docx": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_deepseek_v4_internals\\final\\blog.docx",
+    "size": 2358425,
+    "pass": true,
+    "paragraphs": 358,
+    "headings": 27,
+    "numbered_paragraphs": 113,
+    "tables": 9,
+    "embedded_images": 7,
+    "media_parts": 7,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "unavailable_no_bundled_libreoffice"
+  },
+  "pdf": {
+    "path": "D:\\stream-tools\\tech_blog_output\\vllm_deepseek_v4_internals\\final\\blog.pdf",
+    "size": 3487058,
+    "pass": true,
+    "pages": 22,
+    "encrypted": false,
+    "embedded_image_xobjects": 7,
+    "expected_images": 7,
+    "pages_without_extractable_text": [],
+    "title": "从压缩注意力到可执行推理：DeepSeek V4 如何落入 vLLM",
+    "visual_render_qa": "pass_all_22_pages"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 21346,
+      "translated_chars": 54012,
+      "source_images": 7,
+      "translated_images": 7,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_deepseek_v4_internals\\final\\blog.en.docx",
+      "size": 2358862,
+      "pass": true,
+      "paragraphs": 358,
+      "headings": 27,
+      "numbered_paragraphs": 113,
+      "tables": 9,
+      "embedded_images": 7,
+      "media_parts": 7,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "unavailable_no_bundled_libreoffice"
+    },
+    "pdf": {
+      "path": "D:\\stream-tools\\tech_blog_output\\vllm_deepseek_v4_internals\\final\\blog.en.pdf",
+      "size": 3093768,
+      "pass": true,
+      "pages": 26,
+      "encrypted": false,
+      "embedded_image_xobjects": 7,
+      "expected_images": 7,
+      "pages_without_extractable_text": [],
+      "title": "From Compressed Attention to Executable Inference: How DeepSeek V4 Lands in vLLM",
+      "visual_render_qa": "pass_all_26_pages"
+    }
+  }
+}
