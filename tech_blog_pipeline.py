@@ -1063,11 +1063,15 @@ def translation_qa(source: str, translated: str) -> dict[str, Any]:
         value = re.sub(r"(?m)^\s*#{1,6}\s+\d+(?:\.\d+)*\s+", "", value)
         value = re.sub(r"(?m)^\s*(?:#{1,6}\s+)?\d+[.)：:]\s+", "", value)
         value = value.replace(r"\,", ",")
-        value = re.sub(
-            r"(\d+(?:\.\d+)?)\s*万",
-            lambda match: str(int(float(match.group(1)) * 10_000)),
-            value,
-        )
+        # Scale words so "940 万" and "9.4 million" normalize to the same anchor.
+        for pattern, scale in ((r"万", 10_000), (r"亿", 100_000_000),
+                               (r"million\b", 1_000_000), (r"billion\b", 1_000_000_000)):
+            value = re.sub(
+                rf"(\d+(?:\.\d+)?)\s*{pattern}",
+                lambda match, scale=scale: str(round(float(match.group(1)) * scale)),
+                value,
+                flags=re.I,
+            )
         tokens = re.findall(
             r"(?<![A-Za-z0-9])(?:\d{1,3}(?:[ ,]\d{3})+|\d+(?:\.\d+)?)"
             r"(?:\s*[kK])?(?:%|[A-Za-z]+/s|[A-Za-z]+)?(?:st|nd|rd|th)?",

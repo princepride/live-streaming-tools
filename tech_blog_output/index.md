@@ -54,6 +54,39 @@
     [阅读中文](vllm_request_journey/final/blog.md)
     · [English](vllm_request_journey/final/blog.en.md)
 
+-   <span class="article-kicker">RL TRAINING · NUMERICAL CONSISTENCY</span>
+
+    **大模型强化学习后训练：如何通过 RL-Kernel 彻底消除训推 LogP 偏差**
+
+    ---
+
+    从浮点归约顺序出发，拆解 RL-Kernel 如何锁定五类关键算子的数值契约，并在 CUDA 与 ROCm 上实现 200 步 0 mismatch。
+
+    [阅读中文](rl_kernel_train_infer_consistency/final/blog.md)
+    · [English](rl_kernel_train_infer_consistency/final/blog.en.md)
+
+-   <span class="article-kicker">MODEL ROUTING · MIXTURE OF MODELS</span>
+
+    **混合模型系统构建：开源语义路由器的架构演进与工程实践**
+
+    ---
+
+    从两层网关的语义盲区出发，拆解 vLLM-SR 的信号驱动路由、多模型协作算法与 MoM 虚拟模型抽象。
+
+    [阅读中文](vllm_semantic_router/final/blog.md)
+    · [English](vllm_semantic_router/final/blog.en.md)
+
+-   <span class="article-kicker">MULTIMODAL RL · DIFFUSION TRAINING</span>
+
+    **多模态强化学习工程解析：VeRL-Omni 架构与 MiniMax-H3 训练实录**
+
+    ---
+
+    从文本 RL 与扩散 RL 的范式差异出发，拆解 VeRL-Omni 三引擎异步架构、DiffusionNFT、工程排雷与编码器并行切分。
+
+    [阅读中文](minimax_h3_verl_omni_rl/final/blog.md)
+    · [English](minimax_h3_verl_omni_rl/final/blog.en.md)
+
 -   <span class="article-kicker">AGENT SERVING · DISTRIBUTED CACHE</span>
 
     **把缓存变成服务边界：Kimi-K3 在 vLLM 上的生产推理设计**

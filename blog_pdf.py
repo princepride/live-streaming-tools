@@ -45,7 +45,8 @@ LINK = colors.HexColor("#0563C1")
 
 
 def _font_path(*names: str) -> Path:
-    roots = [Path("C:/Windows/Fonts"), Path("/usr/share/fonts"), Path("/Library/Fonts")]
+    roots = [Path("C:/Windows/Fonts"), Path("/usr/share/fonts"), Path("/Library/Fonts"),
+             Path("/System/Library/Fonts"), Path("/System/Library/Fonts/Supplemental")]
     for root in roots:
         for name in names:
             candidate = root / name
@@ -61,11 +62,13 @@ def register_fonts(language: str = "zh") -> tuple[str, str]:
     bold_name = "BlogLatinBold" if language == "en" else "BlogCJKBold"
     if regular_name not in pdfmetrics.getRegisteredFontNames():
         if language == "en":
-            regular = _font_path("arial.ttf", "LiberationSans-Regular.ttf")
-            bold = _font_path("arialbd.ttf", "LiberationSans-Bold.ttf")
+            regular = _font_path("arial.ttf", "LiberationSans-Regular.ttf", "Arial.ttf")
+            bold = _font_path("arialbd.ttf", "LiberationSans-Bold.ttf", "Arial Bold.ttf")
         else:
-            regular = _font_path("msyh.ttc", "simhei.ttf", "NotoSansCJK-Regular.ttc")
-            bold = _font_path("msyhbd.ttc", "simhei.ttf", "NotoSansCJK-Bold.ttc")
+            regular = _font_path("msyh.ttc", "simhei.ttf", "NotoSansCJK-Regular.ttc",
+                                 "STHeiti Light.ttc")
+            bold = _font_path("msyhbd.ttc", "simhei.ttf", "NotoSansCJK-Bold.ttc",
+                              "STHeiti Medium.ttc")
         pdfmetrics.registerFont(TTFont(regular_name, str(regular), subfontIndex=0))
         pdfmetrics.registerFont(TTFont(bold_name, str(bold), subfontIndex=0))
         pdfmetrics.registerFontFamily(regular_name, normal=regular_name, bold=bold_name,
@@ -84,16 +87,35 @@ GLYPH_FALLBACKS = str.maketrans({
 })
 
 
+# Math symbols emitted by latex_to_plain that the Latin PDF font (Arial) lacks; the
+# CJK font covers them, so only English output needs the ASCII spelling.
+LATIN_FALLBACKS = str.maketrans({
+    "∈": " in ", "∉": " not in ", "∀": "for all ", "∃": "exists ", "∇": "grad ",
+    "∝": " ~ ", "∓": "-/+", "⇒": "=>", "⟨": "<", "⟩": ">", "⌊": "floor(", "⌋": ")",
+    "：": ": ",
+})
+
+
+def _latin_safe(text: str, font: str) -> str:
+    return text.translate(LATIN_FALLBACKS) if font == "BlogLatin" else text
+
+
 def strip_sub_sup(text: str) -> str:
     """Flatten the HTML sub/sup MkDocs renders natively but the builders cannot."""
     text = re.sub(r"<sub>(.*?)</sub>", r"_\1", text, flags=re.DOTALL)
     return re.sub(r"<sup>(.*?)</sup>", r"^\1", text, flags=re.DOTALL)
 
 
+def _code_font(code: str, regular_font: str) -> str:
+    """Courier has no CJK glyphs, so CJK inline code falls back to the body font."""
+    return regular_font if re.search(r"[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]", code) else "Courier"
+
+
 def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
     text = inline_math_to_plain(text)
     text = strip_sub_sup(text)
     text = text.translate(GLYPH_FALLBACKS)
+    text = _latin_safe(text, regular_font)
     text = re.sub(r"\\([_*`\[\]()#+.!-])", r"\1", text)
     text = re.sub(r"[\u2011\u2013\u2014]+", " - ", text)
     parts: list[str] = []
@@ -108,13 +130,13 @@ def _inline_markup(text: str, *, regular_font: str, bold_font: str) -> str:
             pieces = []
             for piece in re.split(r"(`[^`]+`)", token[2:-2]):
                 if len(piece) > 1 and piece.startswith("`") and piece.endswith("`"):
-                    pieces.append(f'<font name="Courier" color="#1F4D78" '
+                    pieces.append(f'<font name="{_code_font(piece, regular_font)}" color="#1F4D78" '
                                   f'backColor="#EEF2F6">{html.escape(piece[1:-1])}</font>')
                 elif piece:
                     pieces.append(html.escape(piece))
             parts.append(f'<font name="{bold_font}">{"".join(pieces)}</font>')
         elif token.startswith("`"):
-            parts.append(f'<font name="Courier" color="#1F4D78" backColor="#EEF2F6">'
+            parts.append(f'<font name="{_code_font(token, regular_font)}" color="#1F4D78" backColor="#EEF2F6">'
                          f'{html.escape(token[1:-1])}</font>')
         elif token.startswith("*"):
             parts.append(f'<i>{html.escape(token[1:-1])}</i>')
@@ -432,12 +454,12 @@ def markdown_to_pdf(markdown_path: Path, output_path: Path, *, source_label: str
                 index += 1
             if index < len(lines):
                 index += 1
-            story.append(Paragraph(html.escape(latex_to_plain(" ".join(formula_lines))),
+            story.append(Paragraph(html.escape(_latin_safe(latex_to_plain(" ".join(formula_lines)), regular)),
                                    styles["formula"]))
             continue
         if ((stripped.startswith("$$") and stripped.endswith("$$")) or
                 (stripped.startswith(r"\[") and stripped.endswith(r"\]"))):
-            story.append(Paragraph(html.escape(latex_to_plain(stripped)), styles["formula"]))
+            story.append(Paragraph(html.escape(_latin_safe(latex_to_plain(stripped), regular)), styles["formula"]))
             index += 1
             continue
         image_match = re.fullmatch(r"!\[([^\]]*)\]\(([^)]+)\)", stripped)

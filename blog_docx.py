@@ -196,7 +196,7 @@ def latex_to_plain(value: str) -> str:
     # grouping-aware passes below see only real LaTeX groups.
     value = value.replace(r"\{", _OPEN_BRACE).replace(r"\}", _CLOSE_BRACE)
     while True:
-        unwrapped = re.sub(r"\\(?:text|operatorname|mathrm|mathbf)\{([^{}]*)\}", r"\1", value)
+        unwrapped = re.sub(r"\\(?:text|operatorname|mathrm|mathbf|mathcal|mathbb|mathit|boldsymbol)\{([^{}]*)\}", r"\1", value)
         if unwrapped == value:
             break
         value = unwrapped
@@ -554,6 +554,8 @@ def _extract_title(lines: list[str]) -> tuple[str, str, list[str]]:
         remaining.pop(0)
     if remaining and remaining[0].startswith(">"):
         subtitle = remaining.pop(0).lstrip("> ").strip()
+        # The cover renders the subtitle as plain text, so drop a wrapping **bold**.
+        subtitle = re.sub(r"^\*\*(.+)\*\*$", r"\1", subtitle)
     return title, subtitle, remaining
 
 
@@ -682,6 +684,16 @@ def markdown_to_docx(markdown_path: Path, output_path: Path, *, source_label: st
             _paragraph_shading(paragraph, LIGHT_FILL)
             _paragraph_border(paragraph, side="bottom", color=BORDER, size=6, space=4)
             add_inline(paragraph, latex_to_plain(" ".join(formula_lines)))
+            previous_list_kind = None
+            continue
+        if ((stripped.startswith("$$") and stripped.endswith("$$") and len(stripped) > 4) or
+                (stripped.startswith(r"\[") and stripped.endswith(r"\]"))):
+            # Single-line display math, mirroring the PDF builder.
+            paragraph = document.add_paragraph(style="Formula")
+            _paragraph_shading(paragraph, LIGHT_FILL)
+            _paragraph_border(paragraph, side="bottom", color=BORDER, size=6, space=4)
+            add_inline(paragraph, latex_to_plain(stripped))
+            index += 1
             previous_list_kind = None
             continue
         image_match = re.fullmatch(r"!\[([^\]]*)\]\(([^)]+)\)", stripped)

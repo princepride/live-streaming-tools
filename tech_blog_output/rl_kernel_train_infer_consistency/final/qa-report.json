@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 18485,
+  "image_count": 8,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-05.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-18.png",
+    "assets/slides/slide-22.png",
+    "assets/slides/slide-26.png"
+  ],
+  "docx": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/rl_kernel_train_infer_consistency/final/blog.docx",
+    "size": 2772940,
+    "pass": true,
+    "paragraphs": 216,
+    "headings": 48,
+    "numbered_paragraphs": 47,
+    "tables": 11,
+    "embedded_images": 8,
+    "media_parts": 8,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/rl_kernel_train_infer_consistency/final/blog.pdf",
+    "size": 4076944,
+    "pass": true,
+    "pages": 19,
+    "encrypted": false,
+    "embedded_image_xobjects": 8,
+    "expected_images": 8,
+    "pages_without_extractable_text": [],
+    "title": "大模型强化学习后训练：如何通过 RL-Kernel 彻底消除训推 LogP 偏差",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 18485,
+      "translated_chars": 50821,
+      "source_images": 8,
+      "translated_images": 8,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/rl_kernel_train_infer_consistency/final/blog.en.docx",
+      "size": 2773688,
+      "pass": true,
+      "paragraphs": 216,
+      "headings": 48,
+      "numbered_paragraphs": 47,
+      "tables": 11,
+      "embedded_images": 8,
+      "media_parts": 8,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/rl_kernel_train_infer_consistency/final/blog.en.pdf",
+      "size": 3635917,
+      "pass": true,
+      "pages": 24,
+      "encrypted": false,
+      "embedded_image_xobjects": 8,
+      "expected_images": 8,
+      "pages_without_extractable_text": [],
+      "title": "Reinforcement Learning Post-Training for Large Models: How RL-Kernel Completely Eliminates Train–Inference LogP Discrepancy",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

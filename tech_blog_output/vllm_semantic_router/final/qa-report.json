@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 17987,
+  "image_count": 12,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-05.png",
+    "assets/slides/slide-07.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-09.png",
+    "assets/slides/slide-10.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-15.png",
+    "assets/slides/slide-19.png",
+    "assets/slides/slide-20.png"
+  ],
+  "docx": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_semantic_router/final/blog.docx",
+    "size": 3854737,
+    "pass": true,
+    "paragraphs": 240,
+    "headings": 47,
+    "numbered_paragraphs": 44,
+    "tables": 12,
+    "embedded_images": 12,
+    "media_parts": 12,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_semantic_router/final/blog.pdf",
+    "size": 5517021,
+    "pass": true,
+    "pages": 21,
+    "encrypted": false,
+    "embedded_image_xobjects": 12,
+    "expected_images": 12,
+    "pages_without_extractable_text": [],
+    "title": "混合模型系统构建：开源语义路由器的架构演进与工程实践",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 17987,
+      "translated_chars": 52054,
+      "source_images": 12,
+      "translated_images": 12,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_semantic_router/final/blog.en.docx",
+      "size": 3855374,
+      "pass": true,
+      "paragraphs": 240,
+      "headings": 47,
+      "numbered_paragraphs": 44,
+      "tables": 12,
+      "embedded_images": 12,
+      "media_parts": 12,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_semantic_router/final/blog.en.pdf",
+      "size": 5025776,
+      "pass": true,
+      "pages": 27,
+      "encrypted": false,
+      "embedded_image_xobjects": 12,
+      "expected_images": 12,
+      "pages_without_extractable_text": [],
+      "title": "Building Hybrid Model Systems: Architectural Evolution and Engineering Practice of an Open-Source Semantic Router",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

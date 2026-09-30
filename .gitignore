@@ -66,6 +66,7 @@ site/
 /vllm-parallel-layer-viz.html
 
 # Source media and extracted audio
+*.pptx
 *.mp4
 *.mkv
 *.mov
@@ -81,3 +82,7 @@ site/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# BBDown downloader binary and its Bilibili login cookie
+/BBDown
+/BBDown.data

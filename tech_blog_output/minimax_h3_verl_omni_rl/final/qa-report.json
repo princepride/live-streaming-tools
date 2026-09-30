@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16977,
+  "image_count": 9,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-08.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-12.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-17.png"
+  ],
+  "docx": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_verl_omni_rl/final/blog.docx",
+    "size": 11780064,
+    "pass": true,
+    "paragraphs": 220,
+    "headings": 44,
+    "numbered_paragraphs": 48,
+    "tables": 7,
+    "embedded_images": 9,
+    "media_parts": 9,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_verl_omni_rl/final/blog.pdf",
+    "size": 15384662,
+    "pass": true,
+    "pages": 20,
+    "encrypted": false,
+    "embedded_image_xobjects": 9,
+    "expected_images": 9,
+    "pages_without_extractable_text": [],
+    "title": "多模态强化学习工程解析：VeRL-Omni 架构与 MiniMax-H3 训练实录",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16977,
+      "translated_chars": 47696,
+      "source_images": 9,
+      "translated_images": 9,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": [
+        "1d"
+      ]
+    },
+    "docx": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_verl_omni_rl/final/blog.en.docx",
+      "size": 11780868,
+      "pass": true,
+      "paragraphs": 220,
+      "headings": 44,
+      "numbered_paragraphs": 48,
+      "tables": 7,
+      "embedded_images": 9,
+      "media_parts": 9,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_verl_omni_rl/final/blog.en.pdf",
+      "size": 14940776,
+      "pass": true,
+      "pages": 24,
+      "encrypted": false,
+      "embedded_image_xobjects": 9,
+      "expected_images": 9,
+      "pages_without_extractable_text": [],
+      "title": "Engineering Analysis of Multimodal Reinforcement Learning: VeRL-Omni Architecture and MiniMax-H3 Training Report",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}
