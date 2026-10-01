@@ -47,6 +47,7 @@ references/
 !tech_blog_output/**/final/assets/
 !tech_blog_output/**/final/assets/**
 !tech_blog_output/index.md
+!tech_blog_output/*/zhihu.html
 !tech_blog_output/stylesheets/
 !tech_blog_output/stylesheets/**
 !tech_blog_output/javascripts/

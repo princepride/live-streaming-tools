@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>32 张 H100 承载 128K MoE RL：显存解耦、通信重叠与配置收敛</title>
+<style>
+  :root { --ink:#1a1a1a; --muted:#8590a6; --line:#ebebeb; --accent:#056de8; --code:#f6f6f6; --bg:#fff; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .bar { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+          padding:10px 16px; background:#f8f9fb; border-bottom:1px solid var(--line); font-size:14px; }
+  .bar button { padding:6px 14px; border:1px solid var(--accent); border-radius:4px; cursor:pointer;
+                 background:var(--accent); color:#fff; font-size:14px; }
+  .bar button.ghost { background:#fff; color:var(--accent); }
+  .bar .hint { color:var(--muted); }
+  main { max-width:690px; margin:0 auto; padding:24px 16px 80px; }
+  h1.title { font-size:26px; line-height:1.4; margin:8px 0 20px; }
+  #article h2 { font-size:22px; margin:32px 0 12px; }
+  #article h3 { font-size:19px; margin:24px 0 10px; }
+  #article img { max-width:100%; }
+  #article img[eeimg] { max-width:none; vertical-align:middle; }
+  #article p.pic { margin:16px 0 4px; text-align:center; }
+  #article .formula { text-align:center; overflow-x:auto; }
+  #article blockquote { margin:16px 0; padding:0 14px; border-left:3px solid #d3d3d3; color:#646464; }
+  #article pre { background:var(--code); padding:12px 14px; overflow-x:auto; border-radius:4px; font-size:14px; }
+  #article code { background:var(--code); padding:1px 4px; border-radius:3px; font-size:0.92em; }
+  #article pre code { background:none; padding:0; }
+  #article table { border-collapse:collapse; margin:16px 0; font-size:14px; display:block; overflow-x:auto; }
+  #article th, #article td { border:1px solid var(--line); padding:6px 10px; vertical-align:top; }
+  #article th { background:#f6f6f6; }
+  #article hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="copy-body">复制正文</button>
+  <button id="copy-title" class="ghost">复制标题</button>
+  <span class="hint" id="status">图片使用 GitHub Pages 外链，公式为知乎公式图片。在知乎编辑器正文处粘贴（Ctrl/⌘+V）。</span>
+</div>
+<main>
+  <h1 class="title" id="title">32 张 H100 承载 128K MoE RL：显存解耦、通信重叠与配置收敛</h1>
+  <article id="article">
+<p><strong>原视频</strong>：<a href="https://www.bilibili.com/video/BV1WLKw6aEDq">让长序列 MoE RL 训练更好调</a> · <strong>配套资料</strong>：<a href="https://drive.google.com/file/d/1i5yXqcLLHkDWIgpOnXofOWQAtGrUk9D8/view">配套讲义</a></p>
+<p><em>以 Qwen3.5-35B-A3B 为例，拆解一条从 127.53 TFLOPS/GPU 基线推进到接近 190 TFLOPS/GPU 的组合优化路径。</em></p>
+<p>强化学习训练需要频繁调整 reward、rollout、数据配方和超参数。如果每组实验都要重新盲扫并行配置，系统试错成本很可能先于算法验证成本失控。</p>
+<p>本文讨论一个边界明确的案例：在 32 张 H100 上，让 Qwen3.5-35B-A3B 处理 128K 全局序列。重点不是寻找任意集群规模下的峰值配置，而是解释如何依次处理动态激活、完整 logits、静态模型状态和 MoE 通信，并将高度耦合的并行搜索收敛为一套可复用的训练 recipe。</p>
+<blockquote>
+<p>文中的实验数字、架构描述和性能结论均来自演讲 PPT 与转写材料。涉及设计动机而缺少受控实验时，本文会明确标注证据边界。</p>
+</blockquote>
+<h2>适读人群与前置知识</h2>
+<p>本文面向具备分布式训练、Transformer 和 GPU 性能基础，但尚不熟悉长序列 MoE RL 配置与 Megatron 工程实现的工程师。</p>
+<p>阅读前最好已经了解：</p>
+<ul>
+<li>数据并行、张量并行和流水线并行的基本概念；</li>
+<li>Transformer 前向、反向、activation 与交叉熵计算；</li>
+<li>MoE 的 expert routing、dispatch、expert GEMM 和 combine 流程；</li>
+<li>静态模型状态、动态激活显存、计算时间和通信时间的区别。</li>
+</ul>
+<p>不要求预先掌握 Megatron、FSDP2 或 chunked EP 的具体实现。</p>
+<p>读完本文，应当能够：</p>
+<ul>
+<li>解释 PP、TP、EP、CP、重计算与 local sequence length 的耦合关系；</li>
+<li>区分 full recompute、Linear CE、FSDP2 和 chunked EP 各自处理的瓶颈；</li>
+<li>正确解读 critical-rank trace、单层代理实验和完整组合路径；</li>
+<li>把 PP、TP、EP、CP 的四维盲扫压缩为少量约束驱动的决策；</li>
+<li>理解 primitive 化为什么能缩小优化接入与验证范围。</li>
+</ul>
+<hr>
+<h2>一、先定义问题：RL 需要的不是另一套预训练配置</h2>
+<p>首先要回答：为什么这个案例需要单独设计 RL recipe，而不是直接复用某套预训练参数？</p>
+<p>MoE（Mixture of Experts，混合专家）是一种稀疏模型结构。token 经路由后被分发到不同专家，完成专家计算，再将结果合并。它在常规 Transformer 计算之外增加了路由、跨设备 dispatch/combine 和专家负载均衡问题。</p>
+<p>RL recipe 则不只是一个配置文件，而是一组可以稳定启动、能够被后续实验复用的训练选择，包括资源规模、并行组合、显存策略和运行参数。</p>
+<h3>工作负载差异先于并行参数</h3>
+<p>预训练与 RL 的工程重心可以概括为：</p>
+<table>
+<thead>
+<tr>
+<th>工作负载</th>
+<th>典型资源组织</th>
+<th>主要工程目标</th>
+<th>需要探索的变量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>预训练</td>
+<td>大型单作业长期运行</td>
+<td>维持稳定吞吐</td>
+<td>仍需调参，但运行阶段更强调持续利用资源</td>
+</tr>
+<tr>
+<td>RL</td>
+<td>将有限资源分给多组实验</td>
+<td>多实验并行、快速试错、降低启动门槛</td>
+<td>reward、rollout、数据配方和超参数</td>
+</tr>
+</tbody>
+</table>
+<p>这只是工作负载倾向，并不表示预训练不需要试验，也不表示 RL 不关心吞吐。真正的差异在于，RL 往往同时探索算法、数据和系统配置。若每个候选实验都要先进行一轮漫长的并行组合搜索，GPU 时间就会大量消耗在“如何启动”上。</p>
+<h3>三个数字共同限定问题</h3>
+<p>为什么要看下面这张图？因为模型、硬件和序列长度必须放在一起，才能定义本文所说的“可运行”。</p>
+<p class="pic"><img alt="模型、硬件规模与全局序列长度三项案例边界" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-05.png"></p>
+<p><em>图 1：案例由模型、GPU 数量和全局序列长度三项边界共同界定。来源：演讲 PPT，第 5 页。</em></p>
+<p>图中的三张指标卡分别给出：</p>
+<ul>
+<li><strong>Qwen3.5-35B-A3B MoE</strong>：指定训练对象。该页没有进一步拆分总参数与激活参数口径，不能仅凭名称推算单卡状态占用。</li>
+<li><strong>32 张 H100</strong>：限定可用资源。模型状态、长序列激活和 MoE 通信都必须在这一规模内解决。</li>
+<li><strong>128K global sequence length</strong>：限定全局序列口径。它不等于单条 prompt、单次 rollout 或单张 GPU 上的局部序列长度。</li>
+</ul>
+<p>该页也没有说明 H100 的显存版本、训练精度和 batch size。因此，32 张 H100 与 128K 只能作为本案例的边界，不能解释为适用于任意 MoE 模型的容量结论。</p>
+<p>三项约束形成了一条直接的工程因果链：</p>
+<blockquote>
+<p>RL 需要并行探索多组方案<br>
+→ 单组实验可使用的资源有限<br>
+→ 长序列与 MoE 同时增加显存和通信压力<br>
+→ 每次重新搜索系统配置都会拖慢试验<br>
+→ 因而需要稳定、可复用的运行 recipe。</p>
+</blockquote>
+<p>例如，团队准备比较两种 reward、两种 rollout 配方和两组超参数时，即使不继续扩展组合，也要启动多次训练。若每次都重新盲扫并行配置，一些组合会直接 OOM，另一些虽然能够运行，却可能受限于通信或调度。此时最先失控的往往不是算法复杂度，而是试错成本。</p>
+<p>所以，本文要解决的核心问题是：如何在固定的 32 张 H100 上，为 Qwen3.5-35B-A3B 找到能够承载 128K 全局序列、稳定启动并可供后续 RL 实验复用的运行点。</p>
+<hr>
+<h2>二、基线为什么难调：六个观察量投影成五类压力</h2>
+<p>本节要回答的不是“哪个并行度越大越好”，而是当前配置被哪类资源卡住，以及应当由哪种机制承担这部分压力。</p>
+<p>需要同时考虑：</p>
+<ul>
+<li>PP：Pipeline Parallelism，流水线并行；</li>
+<li>TP：Tensor Parallelism，张量并行；</li>
+<li>EP：Expert Parallelism，专家并行；</li>
+<li>CP：Context Parallelism，上下文并行；</li>
+<li>activation 重计算策略；</li>
+<li>local sequence length，即单张 GPU 实际承担的局部序列长度。</li>
+</ul>
+<p>其中 local seq 是其他选择共同作用的结果，并非完全独立的旋钮。</p>
+<h3>用五类压力建立统一坐标</h3>
+<p>为什么要看下面这张矩阵？因为它把不同并行策略投影到同一组资源维度，避免只盯着显存判断配置。</p>
+<p class="pic"><img alt="PP、TP、EP、CP 与重计算对五类系统压力的影响矩阵" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-07.png"></p>
+<p><em>图 2：箭头表示压力变化方向；空白项不代表影响为零。来源：演讲 PPT，第 7 页。</em></p>
+<p>五类压力分别是：</p>
+<ul>
+<li><strong>静态显存</strong>：参数、梯度和优化器状态等模型状态占用；</li>
+<li><strong>动态显存</strong>：随序列、批量和中间激活变化的占用；</li>
+<li><strong>kernel 开销</strong>：切分后计算变碎或矩阵形状变差造成的效率损失；</li>
+<li><strong>暴露通信</strong>：无法被计算掩盖、直接进入关键路径的通信时间；</li>
+<li><strong>CPU 开销</strong>：kernel launch、通信调度等主机侧压力。</li>
+</ul>
+<p>沿矩阵逐项看：</p>
+<p><strong>增大 PP</strong> 会把模型切到更多流水阶段，主要降低每个阶段承担的静态状态，但也会增加流水线空泡。PP 对动态显存没有同等直接的削减作用，因为流水调度可能要求部分 stage 同时保留多组 microbatch 的激活。</p>
+<p><strong>增大 TP</strong> 可以同时降低静态与动态显存，但也会把矩阵切薄，可能导致 kernel 形状变差；collective 通信随之增加，较短、较碎的计算还会让 CPU 调度更容易暴露。</p>
+<p><strong>增大 EP</strong> 会减少每个 rank 持有的 expert 数量，从而降低静态显存，并改变 grouped GEMM 的工作规模；代价是 dispatch 和 combine 需要更多 all-to-all，暴露通信与 CPU 压力会上升。转写还提到 expert imbalance 可能推高动态显存，但 PPT 没有量化这一关系。</p>
+<p><strong>增大 CP</strong> 直接切分序列，主要缓解动态显存；与此同时，局部计算变短，kernel、通信和 CPU 调度压力可能上升。</p>
+<p><strong>启用重计算</strong> 以重复前向计算换取更少的 activation 保留。材料明确支持的直接收益是动态显存下降，而不是静态显存下降。</p>
+<p>这些箭头只表示影响方向，没有绑定具体起止配置，也不代表影响幅度在不同模型和硬件上保持不变。</p>
+<h3>local seq 为什么会放大耦合</h3>
+<p>演讲采用了一条简化关系。设全局序列长度为 <img src="https://www.zhihu.com/equation?tex=S" alt="S" class="ee_img tr_noresize" eeimg="1">，则：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=S_%7B%5Ctext%7Blocal%7D%7D%3D%5Cfrac%7BS%7D%7BTP%5Ctimes%20CP%7D%5C%5C" alt="S_{\text{local}}=\frac{S}{TP\times CP}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>例如，当 <img src="https://www.zhihu.com/equation?tex=S%3D128K" alt="S=128K" class="ee_img tr_noresize" eeimg="1">、<img src="https://www.zhihu.com/equation?tex=TP%3D2" alt="TP=2" class="ee_img tr_noresize" eeimg="1">、<img src="https://www.zhihu.com/equation?tex=CP%3D2" alt="CP=2" class="ee_img tr_noresize" eeimg="1"> 时：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=S_%7B%5Ctext%7Blocal%7D%7D%3D%5Cfrac%7B128K%7D%7B2%5Ctimes2%7D%3D32K%5C%5C" alt="S_{\text{local}}=\frac{128K}{2\times2}=32K" class="ee_img tr_noresize" eeimg="1"></p>
+<p>若把 CP 从 2 提高到 4，local seq 会进一步缩短到 16K。这样通常有利于动态显存，却意味着单次本地计算持续时间更短，kernel launch、通信和 CPU 调度更难被足够长的计算区间掩盖。</p>
+<p>因此，local seq 既是 TP、CP 的结果，又会反过来影响 kernel 形状和通信暴露程度。PP 与 EP 虽然没有出现在这条简化公式中，却会改变 stage 划分、专家计算和通信拓扑；重计算则改变需要保存的 activation。</p>
+<p>最终的因果链是：</p>
+<blockquote>
+<p>并行与重计算配置<br>
+→ 每卡模型状态和激活规模<br>
+→ local seq 与 kernel 形状<br>
+→ 通信能否被计算覆盖<br>
+→ CPU 调度是否暴露。</p>
+</blockquote>
+<p>这只是演讲采用的简化关系，不应扩展为所有序列并行实现的统一公式。后文 logits 算例里的 <code>local_tokens</code> 也应按对应页面口径单独理解，不能与这里的 local seq 不加区分地混用。</p>
+<h3>配置矩阵中的现实后果</h3>
+<p>为什么要看下面这张配置矩阵？因为它展示了耦合的直接后果：大量组合并不是“稍慢”，而是无法运行。</p>
+<p class="pic"><img alt="35B Megatron 基线中不同并行与重计算组合的运行结果" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-09.png"></p>
+<p><em>图 3：横轴为 TP×CP，纵轴按 PP×EP 和重计算策略分组；红色单元格表示 OOM。来源：演讲 PPT，第 9 页。</em></p>
+<p>在 35B Megatron baseline 中，<code>PP4×EP8 + full recompute + TP2×CP2</code> 是一个可运行点，页面记录为：</p>
+<ul>
+<li>127.5 TFLOPS/GPU；</li>
+<li>42.9 GB 峰值显存。</li>
+</ul>
+<p>它周围存在多个 OOM 单元格。但不同单元格往往同时改变多项并行参数，因此不能据此做单变量归因。空白单元格也只能理解为页面没有给出结果，不能自行补写为 OOM 或未测试。</p>
+<p>该页没有完整列出 TFLOPS 统计口径、GPU 数量、序列长度、批量大小和显存容量上限。因此，它能够证明的是搜索空间高度耦合、存在大量 OOM，而不是某个并行维度具有固定收益。</p>
+<p>PP 还有额外的调度边界。问答中的示例指出：若 <code>PP=8</code>，microbatch 数量也只有 8，pipeline bubble 约为 50%，计算时间与空泡时间大致相当。这个数字只有转写证据，并且只适用于该示例，不能推广为 PP=8 的固定效率。</p>
+<p>基线给出的第一条经验由此明确：先拆资源职责，再比较吞吐。动态 activation 与 local seq 的矛盾最先需要处理，而这会引出一项看似反直觉的选择——接受完整重计算。</p>
+<hr>
+<h2>三、第一步反直觉选择：用完整重计算换取更大 local seq</h2>
+<p>本节要回答：明知会增加计算量，为什么仍然选择 full recompute？</p>
+<p>先区分两种策略：</p>
+<ul>
+<li><strong>full recompute（完整重计算）</strong>：每层前向结束后丢弃对应 activation，反向传播到该层时重新执行所需计算；</li>
+<li><strong>selective recompute（选择性重计算）</strong>：只重算部分操作，其余 activation 继续保留。</li>
+</ul>
+<p>材料没有给出 selective recompute 的完整覆盖范围，因此本文不推断具体算子清单。</p>
+<h3>为什么“少重算”可能带来连锁压力</h3>
+<p>不使用 full recompute 可以节省重算 FLOPs，却需要保留更多 activation。在长序列场景中，这可能形成如下链路：</p>
+<blockquote>
+<p>保留 activation<br>
+→ 动态显存持续承压<br>
+→ 必须缩短 local seq<br>
+→ 增大 CP<br>
+→ 本地计算更加碎片化<br>
+→ kernel 与 CPU launch 开销更容易暴露<br>
+→ CUDA Graph 也被带入联动调优范围。</p>
+</blockquote>
+<p>CUDA Graph 是通过记录并回放 GPU 调度来降低 CPU kernel launch 开销的机制。在这条路径中，它不是一个孤立开关，而是由“显存不足—增加切分—计算碎片化”逐步推到前台的优化项。</p>
+<p>不过，材料没有提供这条路径的同配置吞吐、显存和延迟对照。因此，上述内容是设计权衡链，而不是量化结论。</p>
+<h3>Path B：先释放 activation，再拉长本地计算窗口</h3>
+<p>为什么要看下面这张图？因为它同时画出了 full recompute 的收益链和必须支付的代价。</p>
+<p class="pic"><img alt="完整重计算释放动态显存并增大单卡局部序列的决策路径" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-11.png"></p>
+<p><em>图 4：Path B 以额外计算换取更早释放动态显存和更大的 local seq。来源：演讲 PPT，第 11 页。</em></p>
+<p>图中的收益路径包含三个关键节点：</p>
+<ol>
+<li>
+<p><strong>更早缓解动态显存。</strong><br>
+   每层前向结束后不再长期保存 activation。这里释放的是激活显存，不是参数、梯度、优化器状态或 loss 侧的全部占用。</p>
+</li>
+<li>
+<p><strong>允许更大的 local seq。</strong><br>
+   动态显存留下空间后，系统可以减少仅为压低 activation 峰值而进行的序列切分，让单卡承担更长的局部序列。</p>
+</li>
+<li>
+<p><strong>提供更长的掩盖窗口。</strong><br>
+   本地计算持续时间变长后，CPU 调度、kernel launch 和通信有机会与计算重叠，降低其暴露在关键路径上的比例。</p>
+</li>
+</ol>
+<p>图中的另一条支线是代价：约 <strong>30% 额外计算量</strong>。这是材料给出的近似 FLOPs 成本，不等于端到端训练时间必然增加 30%。如果更大的 local seq 改善了 kernel 工作粒度，并掩盖部分调度与通信开销，额外计算量和最终训练时间之间不会保持简单的一比一关系。</p>
+<p>同样，“隐藏开销”不表示开销消失。实际效果仍取决于计算长度、通信时序和可实现的重叠程度。</p>
+<p>full recompute 的本质，是用确定的重算成本交换动态显存，再用释放出的空间扩大单卡工作量。但它只直接处理 activation。activation 峰值下降后，完整 fp32 logits 和静态模型状态会成为新的显存约束。</p>
+<hr>
+<h2>四、连续拆掉两类显存峰值：Linear CE 与 FSDP2</h2>
+<p>扩大 local seq 后，显存问题会从“保存多少 activation”转移到两类来源：</p>
+<ul>
+<li>loss 计算时可能物化的完整 <code>logits</code>；</li>
+<li>长期驻留的参数、梯度和优化器状态。</li>
+</ul>
+<p>两者的生命周期和形成原因不同，必须分别处理。</p>
+<h3>Linear CE：避免完整 logits 物化</h3>
+<p><code>logits</code> 是交叉熵之前沿词表维展开的输出。设：</p>
+<ul>
+<li><code>local_tokens</code>：当前 loss 计算口径下的本地 token 数；</li>
+<li><code>vocab_partition</code>：当前 rank 承担的词表分片大小；</li>
+<li>fp32 每个元素占 4 字节。</li>
+</ul>
+<p>若实现生成并保留完整 fp32 logits，则估算显存为：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=M_%7B%5Ctext%7Blogits%7D%7D%20%3D%20%5Ctext%7Blocal_tokens%7D%20%5Ctimes%20%5Ctext%7Bvocab_partition%7D%20%5Ctimes%204%5C%20%5Ctext%7Bbytes%7D%5C%5C" alt="M_{\text{logits}} = \text{local_tokens} \times \text{vocab_partition} \times 4\ \text{bytes}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>为什么要看下面这张图？因为它说明只改变 TP 与 CP 的分配方式，不一定能降低完整 logits 的乘积规模。</p>
+<p class="pic"><img alt="Linear CE 对完整 fp32 logits 峰值及两种并行切分的比较" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-12.png"></p>
+<p><em>图 5：完整 logits 的估算公式、两种 TP/CP 切分及采用 Linear CE 后的代表性配置。来源：演讲 PPT，第 12 页。</em></p>
+<p>页面给出两个算例：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th style="text-align: right;"><code>local_tokens</code></th>
+<th style="text-align: right;"><code>vocab_partition</code></th>
+<th style="text-align: right;">完整 fp32 logits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TP=2，CP=2</td>
+<td style="text-align: right;">65,536</td>
+<td style="text-align: right;">124,160</td>
+<td style="text-align: right;">约 32.55 GB</td>
+</tr>
+<tr>
+<td>TP=1，CP=4</td>
+<td style="text-align: right;">32,768</td>
+<td style="text-align: right;">248,320</td>
+<td style="text-align: right;">约 32.55 GB</td>
+</tr>
+</tbody>
+</table>
+<p>第一种配置：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=65%7B%2C%7D536%5Ctimes124%7B%2C%7D160%5Ctimes4%20%5Capprox32.55%5C%20%5Ctext%7BGB%7D%5C%5C" alt="65{,}536\times124{,}160\times4 \approx32.55\ \text{GB}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>第二种配置：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=32%7B%2C%7D768%5Ctimes248%7B%2C%7D320%5Ctimes4%20%5Capprox32.55%5C%20%5Ctext%7BGB%7D%5C%5C" alt="32{,}768\times248{,}320\times4 \approx32.55\ \text{GB}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>当 TP 与 CP 的切分份额在 token 维和词表维之间重新分配时，一个局部维度缩小，另一个局部维度可能同步放大，二者乘积未必下降。</p>
+<p>Linear CE（Linear Cross Entropy，线性交叉熵）针对的正是这个峰值。它将线性输出与交叉熵计算组织起来，避免生成并保留完整 logits。其意义不是先分配约 32.55 GB 再释放，而是不让这一完整张量成为必要的中间状态。</p>
+<p>不能把 32.55 GB 直接从训练峰值里相减。logits、activation、临时 buffer 与通信张量的生命周期可能部分重叠，整体峰值取决于实际时序。材料也没有提供同配置、仅关闭 Linear CE 的对照实验。</p>
+<p>采用 Linear CE 后，页面给出的代表性布局为：</p>
+<ul>
+<li>TP=1；</li>
+<li>PP=2；</li>
+<li>EP=8；</li>
+<li>CP=4；</li>
+<li>full recompute；</li>
+<li>162.07 TFLOPS/GPU；</li>
+<li>55.91 GB 峰值显存。</li>
+</ul>
+<p>由于并行配置也发生变化，162.07 TFLOPS/GPU 不能归因于 Linear CE 单项改动。可靠结论是：Linear CE 解决完整 logits 的物化问题；如果某种实现本来就采用分块、融合或其他非完整物化路径，则不能照搬这项显存估算。</p>
+<h3>FSDP2：削减长期驻留的静态状态</h3>
+<p>去掉 loss 侧大张量后，参数、梯度和优化器状态仍会长期存在。这部分 static state 不能通过 activation 重计算消除，其占用取决于状态副本和分片方式。</p>
+<p>为什么要看下面这张图？因为它比较了 distributed optimizer 与 FSDP2 的分片职责，并给出同一所列配置下的显存差异。</p>
+<p class="pic"><img alt="Distributed optimizer 与 FSDP2 的状态分片范围和显存结果对比" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-13.png"></p>
+<p><em>图 6：distributed optimizer 与 FSDP2 的状态职责及显存对比。来源：演讲 PPT，第 13 页。</em></p>
+<p>页面将两种方案概括为：</p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>优化器状态</th>
+<th>参数与梯度</th>
+<th>页面类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>distributed optimizer</td>
+<td>分片</td>
+<td>仍受 PP/EP 拓扑约束并保留相应冗余</td>
+<td>近似 ZeRO-1</td>
+</tr>
+<tr>
+<td>FSDP2</td>
+<td>全局分片</td>
+<td>同样进行全局分片</td>
+<td>近似 ZeRO-3</td>
+</tr>
+</tbody>
+</table>
+<p>“近似 ZeRO-1”和“近似 ZeRO-3”只是帮助理解分片层级，不表示相关实现与标准 ZeRO 方案严格等价。</p>
+<p>在 <code>TP=1、PP=2、EP=8、CP=4、full recompute</code> 的所列配置下，页面报告峰值显存从 55.91 GB 降至 47.03 GB，绝对下降：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=55.91-47.03%3D8.88%5C%20%5Ctext%7BGB%7D%5C%5C" alt="55.91-47.03=8.88\ \text{GB}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>该页没有提供同配置吞吐、通信量或完整测量口径。因此，8.88 GB 可以作为静态显存下降的证据，不能进一步推出端到端性能收益。</p>
+<p>FSDP2 更重要的作用是重新划分并行维度的职责：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>在本案例中的主要职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CP</td>
+<td>调节 local seq，在容量与计算粒度之间取平衡</td>
+</tr>
+<tr>
+<td>EP</td>
+<td>调节 MoE 计算与通信</td>
+</tr>
+<tr>
+<td>PP</td>
+<td>作为峰值显存或极限性能的可选细调项</td>
+</tr>
+<tr>
+<td>TP</td>
+<td>默认退出 recipe，存在明确模型或硬件理由时再启用</td>
+</tr>
+</tbody>
+</table>
+<p>这不是所有模型和集群的通用规则。在更大规模下，FSDP2 的通信范围本身也可能成为约束。</p>
+<p>至此，full recompute 处理 activation，Linear CE 处理完整 logits，FSDP2 处理静态状态。系统不再主要围绕 OOM 调整后，关键路径自然转向 MoE dispatch/combine 中暴露的 all-to-all。</p>
+<hr>
+<h2>五、从串行 all-to-all 到 chunked EP：重叠窗口如何出现</h2>
+<p>本节要回答：在 full recompute 路径下，怎样重新建立 MoE 通信与 expert compute 的重叠？</p>
+<p>一次典型 MoE 前向包含：</p>
+<ol>
+<li><code>dispatch</code>：通过 all-to-all 将 token 发送到 expert 所在 rank；</li>
+<li><code>grouped GEMM</code>：执行专家分组矩阵乘法；</li>
+<li><code>combine</code>：通过 all-to-all 将 expert 输出送回原 rank。</li>
+</ol>
+<p>FSDP2 不会自动隐藏这两次通信。旧的 1F1B overlap 又依赖不同 microbatch 或流水阶段之间的交错，演讲认为它不适配当前 full recompute 路径。</p>
+<p>问题因此变为：不消除 all-to-all，如何重新创造可供通信和计算交错推进的窗口？</p>
+<h3>token 分块提供调度自由度</h3>
+<p>为什么要看下面这张图？因为它展示了 chunked EP 的最小机制：每块内部的依赖没有改变，新增的是跨块交错的可能性。</p>
+<p class="pic"><img alt="no-chunk 与 chunk2 的 MoE 执行链对比" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-16.png"></p>
+<p><em>图 7：沿 token 维将一个 MoE 层拆为两个 chunk。来源：演讲 PPT，第 16 页。</em></p>
+<p>no-chunk 路径为：</p>
+<pre><code class="language-text">dispatch(all tokens)
+    → grouped GEMM(all tokens)
+    → combine(all tokens)
+</code></pre>
+<p>三步存在直接数据依赖。GEMM 必须等待 dispatch，combine 必须等待 GEMM。即使通信和计算使用不同 CUDA stream，单个大批次内部也缺少可独立推进的工作。</p>
+<p>chunk2 沿 token 维拆出 <code>c0</code> 和 <code>c1</code>：</p>
+<pre><code class="language-text">c0 dispatch → c0 GEMM → c0 combine
+c1 dispatch → c1 GEMM → c1 combine
+</code></pre>
+<p>每个 chunk 内部仍遵循相同依赖，但两块之间可以错位：</p>
+<ul>
+<li><code>c0</code> 进入 grouped GEMM 后，通信流有机会推进 <code>c1 dispatch</code>；</li>
+<li><code>c1</code> 进入计算时，通信流又可以推进已经满足依赖的 combine；</li>
+<li>一部分 all-to-all 因而进入另一块 expert compute 的时间窗口。</li>
+</ul>
+<p>其机制可以压缩为：</p>
+<blockquote>
+<p>token 分块<br>
+→ 单次通信和计算粒度减小<br>
+→ 一块计算期间出现另一块可调度的通信<br>
+→ 通信流与计算流错位推进<br>
+→ 部分 all-to-all 不再完全暴露。</p>
+</blockquote>
+<p>图中的两条逻辑链并不表示 <code>c0</code> 与 <code>c1</code> 从头到尾完全并行。每块 GEMM 仍需等待本块 dispatch，combine 也仍需等待本块 GEMM。分块还会增加调度、同步和算子调用，材料没有量化这些固定成本。</p>
+<h3>前向 trace：关键窗口从约 10.06 ms 缩至 7.81 ms</h3>
+<p>为什么要看下面这张 trace？因为它把抽象的“双流重叠”落实到了实际时间轴。</p>
+<p class="pic"><img alt="16K critical rank 上的前向 baseline 与 chunk2 时间线" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-17.png"></p>
+<p><em>图 8：16K、critical rank 条件下的 Forward MoE EP all-to-all 调度对比。来源：演讲 PPT，第 17 页。</em></p>
+<p>图中通信流负责 all-to-all，计算流负责 grouped GEMM。跨 stream 箭头表示数据依赖：箭头到达之前，后继操作不能开始。CUDA waiting 区域表示操作仍在等待依赖或可执行条件，不能视作有效计算。</p>
+<p>baseline 中，dispatch、grouped GEMM 和 combine 基本串行排列，measured total 约为 <strong>10.06 ms</strong>。</p>
+<p>chunk2 中，两块 grouped GEMM 与多段通信错位推进，measured total 约为 <strong>7.81 ms</strong>。该观测窗口缩短约：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=10.06-7.81%3D2.25%5C%20%5Ctext%7Bms%7D%5C%5C" alt="10.06-7.81=2.25\ \text{ms}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>这证明在该 critical rank 的前向窗口内出现了有效重叠，但不表示 all-to-all 已完全隐藏。图中仍存在等待区，而且这个结果不是所有 rank 的平均值，也不是完整训练 step 的耗时。</p>
+<h3>反向 trace：分块 dgrad，延后 wgrad</h3>
+<p>为什么要看下面这张图？因为反向不仅要安排通信，还要决定 dgrad 与 wgrad 何时占用计算流。</p>
+<p class="pic"><img alt="16K critical rank 上的反向 baseline 与 chunk2 时间线" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-18.png"></p>
+<p><em>图 9：16K、critical rank 条件下的 Backward MoE EP all-to-all 调度对比。来源：演讲 PPT，第 18 页。</em></p>
+<p>这里：</p>
+<ul>
+<li><strong>dgrad</strong> 是对输入数据或 activation 的梯度计算；</li>
+<li><strong>wgrad</strong> 是权重梯度计算。</li>
+</ul>
+<p>baseline 的 raw window 约为 <strong>13.83 ms</strong>。</p>
+<p>chunk2 将 dgrad 按 chunk 推进，使一块 dgrad 与另一块已经满足依赖的反向 all-to-all 交错执行。wgrad 则被移动到 delayed wgrad 区域，在关键通信与 dgrad 路径推进之后再执行，避免过早占用计算流。</p>
+<p>chunk2 的 raw window 约为 <strong>10.81 ms</strong>，窗口缩短约：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=13.83-10.81%3D3.02%5C%20%5Ctext%7Bms%7D%5C%5C" alt="13.83-10.81=3.02\ \text{ms}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>但 raw window 不一定覆盖所有反向工作完成的时刻。延后的 wgrad 仍然需要执行，因此 3.02 ms 不能直接解释为完整反向或完整训练迭代的节省量。</p>
+<h3>融合重计算前向与反向仍是理想调度</h3>
+<p>演讲还展示了一条明确标为 <strong>ideal</strong> 的时间线：把重计算前向与反向组织成连续调度，让前向 grouped GEMM 后直接衔接分块 dgrad，反向通信在依赖满足后进入通信流，wgrad 继续延后。</p>
+<p>这条时间线说明 chunk 边界还可能跨越“重计算前向—反向”阶段，从而扩大重叠窗口。但它是目标机制，不是实测端到端结果。材料没有给出这套融合调度的完整时延、吞吐提升或训练 step 加速比。</p>
+<p>因此，chunked EP 的实质是以 token 分块换取调度自由度。收益取决于 local seq、专家负载均衡、通信与 GEMM 的相对时长，以及额外 launch 和同步成本。</p>
+<hr>
+<h2>六、证据如何读：单层趋势、整条路径与归因边界</h2>
+<p>前后向 trace 只能证明机制在 16K critical rank 的局部窗口内成立。要判断收益是否随序列增长，还需要看序列 sweep；要判断整条方案最终达到什么水平，则要看组合路径。</p>
+<p>这三类证据的口径不同：</p>
+<table>
+<thead>
+<tr>
+<th>证据</th>
+<th>能回答什么</th>
+<th>不能回答什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>critical-rank trace</td>
+<td>关键 rank 的局部时序是否形成重叠</td>
+<td>所有 rank 平均时延、完整训练 step 加速</td>
+</tr>
+<tr>
+<td>单层代理实验</td>
+<td>单个 sparse MoE layer 随序列增长的趋势</td>
+<td>完整模型显存和端到端吞吐</td>
+</tr>
+<tr>
+<td>组合路径汇总</td>
+<td>整套方案是否把运行点推进到更高吞吐</td>
+<td>每项技术的独立加速比</td>
+</tr>
+</tbody>
+</table>
+<h3>单层代理实验：长 local seq 下观察到更大相对收益</h3>
+<p>实验对象是 Qwen3.5-35B-A3B 中的一个稀疏 MoE 层，只测 forward+backward，不包含 attention 和其他 Transformer 层。</p>
+<p>为什么要看下面这张图？因为这里的重点不是某个单点，而是 baseline 与 optimized 两条显存曲线的斜率差异。</p>
+<p class="pic"><img alt="单个稀疏 MoE 层在不同序列长度下的峰值显存" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-20.png"></p>
+<p><em>图 10：单个 sparse MoE layer 在不同 local sequence length 下的 rank-max 峰值显存。来源：演讲 PPT，第 20 页。</em></p>
+<p>纵轴采用 <strong>rank-max peak memory</strong>：先记录各 rank 的峰值显存，再取最大值。它适合判断最吃紧的 rank 是否会阻止系统运行，但不等于所有 GPU 的平均显存。</p>
+<p>横轴覆盖 4K、8K、16K、32K 和 64K local sequence length。两条曲线都随序列增长而上升，但优化后的斜率更低。64K 时，从图中近似读取：</p>
+<ul>
+<li>baseline 约 22.2 GB；</li>
+<li>optimized 约 9.6 GB。</li>
+</ul>
+<p>这两个数字只能写作读图近似值，不能当作页面提供的精确测量。更稳妥的结论是：在该单层代理实验中，序列增长时两条显存曲线的差距扩大。</p>
+<p>与之配套的单层 forward+backward 相对加速为：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">local sequence length</th>
+<th style="text-align: right;">相对 baseline 加速</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">4K</td>
+<td style="text-align: right;">7.8%</td>
+</tr>
+<tr>
+<td style="text-align: right;">8K</td>
+<td style="text-align: right;">8.5%</td>
+</tr>
+<tr>
+<td style="text-align: right;">16K</td>
+<td style="text-align: right;">12.9%</td>
+</tr>
+<tr>
+<td style="text-align: right;">32K</td>
+<td style="text-align: right;">18.4%</td>
+</tr>
+<tr>
+<td style="text-align: right;">64K</td>
+<td style="text-align: right;">24.0%</td>
+</tr>
+</tbody>
+</table>
+<p>这些数据表明，相对收益在所测范围内随 local seq 增长。一个可能的解释是：较长的本地计算区间能够摊薄固定调度与算子调用成本，并提供更多可供分块调度和通信重叠的工作。但现有序列 sweep 不能单独证明这一机制解释，也不能排除其他实现因素。</p>
+<p>尤其需要注意，64K 下的 24.0% 只适用于这一个 sparse MoE layer 的 forward+backward。它不包含 attention，不能改写为完整训练 step 提速 24.0%。</p>
+<h3>组合路径：接近 190 TFLOPS/GPU 应怎样解释</h3>
+<p>为什么要看下面这张图？因为它同时展示了优化方法、并行配置、吞吐和峰值显存的变化。缺少其中任何一列，都容易做出错误归因。</p>
+<p class="pic"><img alt="从基线到 chunked EP 的组合优化路径" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-22.png"></p>
+<p><em>图 11：吞吐、峰值显存与并行配置共同变化的优化路径。来源：演讲 PPT，第 22 页。</em></p>
+<p>页面给出的代表性阶段为：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>TP/PP/EP/CP</th>
+<th style="text-align: right;">TFLOPS/GPU</th>
+<th style="text-align: right;">峰值显存</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>baseline</td>
+<td>2/4/8/2</td>
+<td style="text-align: right;">127.53</td>
+<td style="text-align: right;">42.91 GB</td>
+</tr>
+<tr>
+<td>Linear CE</td>
+<td>1/2/8/4</td>
+<td style="text-align: right;">162.07</td>
+<td style="text-align: right;">55.91 GB</td>
+</tr>
+<tr>
+<td>FSDP2</td>
+<td>1/2/8/4</td>
+<td style="text-align: right;">163.06</td>
+<td style="text-align: right;">47.03 GB</td>
+</tr>
+<tr>
+<td>PP2→PP1</td>
+<td>1/1/8/4</td>
+<td style="text-align: right;">180.18</td>
+<td style="text-align: right;">60.54 GB</td>
+</tr>
+<tr>
+<td>chunked EP</td>
+<td>1/1/8/4</td>
+<td style="text-align: right;">185.96–187.10</td>
+<td style="text-align: right;">37–38 GB</td>
+</tr>
+</tbody>
+</table>
+<p>第一阶段到第二阶段不仅引入 Linear CE，还同时改变了 TP、PP 和 CP，因此 127.53 到 162.07 的差值不能全部归因于 Linear CE。</p>
+<p>在所列的相同并行配置下，FSDP2 阶段从 162.07 变为 163.06 TFLOPS/GPU，更明确的变化是峰值显存从 55.91 GB 降至 47.03 GB。该对比没有给出完整的吞吐测量条件，因此不宜继续拆解二者之间的性能差异。</p>
+<p>随后路径将 PP 从 2 改为 1，页面报告吞吐达到 180.18 TFLOPS/GPU，同时峰值显存升至 60.54 GB。由于这仍是组合路径中的阶段变化，现有材料不能把吞吐差值严格归因于减少 pipeline bubble，也不能断言 PP 调整完全由前一阶段的显存变化单独促成。</p>
+<p>chunked EP 阶段继续保持 <code>TP=1、PP=1、EP=8、CP=4</code>，页面同时观察到更高吞吐和约 37–38 GB 峰值显存。结合前面的单层机制与 trace，可以确认分块为通信和计算重叠提供了调度粒度；但没有受控实验将最终峰值变化拆成 chunked EP 的独立贡献。</p>
+<p>页面流程框把最终结果概括为约 <strong>190 TFLOPS/GPU、37.09 GB</strong>；表格则记录了更具体的 <strong>185.96–187.10 TFLOPS/GPU、37–38 GB</strong>。前者是近似概括，后者是页面中的代表范围，不能合并成“精确测得 190 TFLOPS/GPU”。</p>
+<p>因此，这组结果能够支持：</p>
+<blockquote>
+<p>组合方案把代表性吞吐从 127.53 TFLOPS/GPU 推进到接近 190 TFLOPS/GPU，并在最终阶段观察到约 37–38 GB 的峰值显存。</p>
+</blockquote>
+<p>它不能支持：</p>
+<blockquote>
+<p>Linear CE、FSDP2、降低 PP 或 chunked EP 分别贡献了多少独立加速或显存收益。</p>
+</blockquote>
+<p>整条路径应当作为组合优化理解，而不是将相邻阶段的差值拆成单项技术收益。</p>
+<hr>
+<h2>七、让搜索空间收敛：从四维盲扫到约束驱动 recipe</h2>
+<p>确认组合路径有效后，下一个问题是如何避免继续穷举 PP、TP、EP、CP。</p>
+<p>核心方法不是先找最优值，而是先给每个维度分配职责，再用显存和通信约束消去不必要的自由度。</p>
+<p>为什么要看下面这张图？因为它把左侧的四维耦合搜索，压缩成右侧三个有顺序的配置决策。</p>
+<p class="pic"><img alt="从 PP、TP、EP、CP 四维搜索收敛为三个配置决策" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-23.png"></p>
+<p><em>图 12：以显存与通信约束缩小并行配置空间。来源：演讲 PPT，第 23 页。</em></p>
+<p>图中的箭头不是张量流，而是搜索空间的收敛过程：</p>
+<ol>
+<li>先受 MoE 通信与拓扑约束，确定 EP；</li>
+<li>再按目标 local seq 反推 CP；</li>
+<li>最后判断是否需要 PP 提供额外显存余量；</li>
+<li>TP 默认移出 recipe。</li>
+</ol>
+<h3>第一步：固定 EP 的默认起点</h3>
+<p>当前案例采用 <code>EP=8</code> 作为默认折中，而不是继续把 EP 当作自由搜索维度。</p>
+<p>EP 增大可以减少每个 rank 持有的 expert 数量，却会改变 all-to-all 范围，并可能加重专家负载不均衡。它首先受到 MoE 通信与拓扑约束，而不是遵循“GPU 越多，EP 就应越大”的简单规则。</p>
+<p>图中还出现了单位为 <code>B</code> 的 EP 阈值，但材料没有定义 <code>B</code> 的含义。正文不能把它换算为 token、batch size 或参数规模。</p>
+<h3>第二步：由目标 local seq 反推 CP</h3>
+<p>本案例希望把每张 GPU 的 local seq 控制在 16K–32K。沿用演讲的简化关系：</p>
+<p class="formula"><img src="https://www.zhihu.com/equation?tex=S_%7B%5Ctext%7Blocal%7D%7D%20%5Capprox%20%5Cfrac%7BS_%7B%5Ctext%7Bglobal%7D%7D%7D%7BTP%5Ctimes%20CP%7D%5C%5C" alt="S_{\text{local}} \approx \frac{S_{\text{global}}}{TP\times CP}" class="ee_img tr_noresize" eeimg="1"></p>
+<p>默认 <code>TP=1</code> 时，对 128K 全局序列：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">CP</th>
+<th style="text-align: right;">简化估算的 local seq</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">32K</td>
+<td>目标区间上界</td>
+</tr>
+<tr>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">16K</td>
+<td>目标区间下界</td>
+</tr>
+</tbody>
+</table>
+<p>因此，可以先把 CP 候选收敛到 4–8，而不是从大量组合开始盲扫。</p>
+<p>这只是最小反推示例。实际映射仍受具体实现和其他并行维度影响，不能将该公式当作完整的显存与执行模型。</p>
+<h3>第三步：PP 只提供可选余量，TP 默认收起</h3>
+<p>在当前 recipe 中：</p>
+<ul>
+<li><code>PP=2</code> 只在需要额外显存 headroom 时启用；</li>
+<li>TP 在没有明确模型或硬件理由时默认不使用；</li>
+<li>若出现新的容量或拓扑约束，再重新引入 TP。</li>
+</ul>
+<p>最终决策规则可以压缩为：</p>
+<ol>
+<li>默认从 <code>EP=8</code> 开始；</li>
+<li>按每卡 16K–32K local seq 反推 CP；</li>
+<li>显存余量不足时再评估 <code>PP=2</code>；</li>
+<li>只有出现明确约束时才重新启用 TP。</li>
+</ol>
+<p>这套并行配置依赖四项技术支柱：</p>
+<table>
+<thead>
+<tr>
+<th>技术组件</th>
+<th>主要负责的资源问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>full recompute</td>
+<td>以额外计算换取更大的 local seq</td>
+</tr>
+<tr>
+<td>Linear CE</td>
+<td>避免完整 fp32 logits 峰值</td>
+</tr>
+<tr>
+<td>FSDP2</td>
+<td>分片参数、梯度和优化器状态</td>
+</tr>
+<tr>
+<td>chunked EP</td>
+<td>处理暴露的 MoE all-to-all</td>
+</tr>
+</tbody>
+</table>
+<p>四项之间是组合关系，不表示严格执行顺序。</p>
+<p>这套方法只适用于当前模型、32 张 H100、128K 全局序列和演讲实现语境。它提供的是缩小搜索空间的方法，不是所有 MoE 集群上的通用最优配置。</p>
+<hr>
+<h2>八、把优化做成 primitive：缩小接入与验证半径</h2>
+<p>配置空间收敛后，工程改动仍可能跨越多条训练链路。本节要回答：如何让 FSDP2、Linear CE 和 chunked EP 以可局部开发、可成对验证的方式接入？</p>
+<p>FSDP2 与多维并行组合时，会牵动进程组、参数聚合、梯度分片、优化器状态、checkpoint 和重计算。chunked EP 与 full recompute 组合时，则会改变 dispatch/combine 时序、前后向依赖、delayed wgrad 位置和 buffer 生命周期。</p>
+<p>材料没有量化工期和代码改动量，但明确表明主要成本来自工程接入与验证，而不是底层 kernel 能否完成计算。</p>
+<h3>Runtime、Model、Primitive 三层组织</h3>
+<p>为什么要看下面这张图？因为它表达的是工程职责关系，而不是训练时的张量数据流。</p>
+<p class="pic"><img alt="Megatron-Lite 的 Runtime、Model 与 Primitive 三层组织" src="https://princepride.github.io/live-streaming-tools/long_sequence_moe_rl/final/assets/slides/slide-26.png"></p>
+<p><em>图 13：Megatron-Lite 在复用 Megatron-Core 底层 kernel 的前提下重组系统。来源：演讲 PPT，第 26 页。</em></p>
+<p>三层分别负责：</p>
+<ul>
+<li><strong>Runtime</strong>：训练协议和运行过程如何推进；</li>
+<li><strong>Model</strong>：连接并组合模型需要的能力；</li>
+<li><strong>Primitive</strong>：提供可替换的 loss、状态分片或通信能力。</li>
+</ul>
+<p>图中的箭头表示架构组织关系：Runtime 通过 Model 使用组合后的 primitive。它不是通信方向，也不表示显存或张量传输时序。</p>
+<p>这种组织形成了一个更小的验证闭环：</p>
+<blockquote>
+<p>明确能力边界<br>
+→ 局部替换实现<br>
+→ 在固定口径下成对比较<br>
+→ 验证通过后重新组合<br>
+→ 缩小接入和回归范围。</p>
+</blockquote>
+<p>材料没有给出三层的正式接口定义，因此不能进一步推断具体类结构或调用约束。</p>
+<h3>三项优化对应三类 primitive</h3>
+<table>
+<thead>
+<tr>
+<th>优化</th>
+<th>Primitive 边界</th>
+<th>主要验证关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linear CE</td>
+<td>loss</td>
+<td>loss 正确性与 logits 峰值</td>
+</tr>
+<tr>
+<td>FSDP2</td>
+<td>optimizer/state sharding</td>
+<td>参数、梯度和优化器状态分片</td>
+</tr>
+<tr>
+<td>chunked EP</td>
+<td>MoE communication</td>
+<td>all-to-all 是否与计算形成重叠</td>
+</tr>
+</tbody>
+</table>
+<p>这不是运行顺序，而是功能边界映射。</p>
+<p>Linear CE 回答“损失是否正确、完整 logits 峰值是否下降”；FSDP2 回答“状态是否按预期分片”；chunked EP 回答“dispatch/combine 时序是否形成有效重叠”。三者的输入、输出与测试指标不同，不能使用同一组性能数字相互替代。</p>
+<h3>Paired test：把正确性与性能分开验证</h3>
+<p>演讲提出的开发闭环包含四步：</p>
+<ol>
+<li><strong>Skill</strong>：读取 primitive 的说明，确认能力边界和验证口径；</li>
+<li><strong>Change</strong>：修改局部实现；</li>
+<li><strong>Paired test</strong>：让新旧实现成对运行；</li>
+<li><strong>Compose</strong>：测试通过后，将新 primitive 重新组合进模型。</li>
+</ol>
+<p>paired test 检查四项指标：</p>
+<ul>
+<li><code>loss</code>：损失是否对齐；</li>
+<li><code>grad</code>：梯度是否对齐；</li>
+<li><code>peak</code>：峰值显存是否符合预期；</li>
+<li><code>time</code>：耗时是否回归或改善。</li>
+</ul>
+<p>其中 <code>loss</code> 和 <code>grad</code> 面向数值正确性，<code>peak</code> 和 <code>time</code> 面向资源与性能。性能改善不能替代数值正确，数值通过也不表示性能目标已经达到。</p>
+<p>材料没有提供误差容限、随机种子、对照基线、测试硬件、自动修改成功率或人工介入比例。因此，paired test 目前只能被理解为验证框架，不能据此宣称已经形成完备的自动验收标准。</p>
+<p>演讲者还主张，Megatron-Lite 与 Megatron-Core 复用相同底层 kernel，因此性能和精度完全一致；转写进一步提出，减少部分 CPU 条件判断后，轻量路径可能更快。这些说法缺少同配置基准、误差范围和独立验证。kernel 相同并不足以自动推出端到端行为完全一致，“可能更快”也只能作为待验证判断。</p>
+<p>Megatron-FSDP、训练用 mega kernel、multi-LoRA、QAT、更多模型支持，以及异步 rollout、weight resharding，均属于后续规划，不能当作已经交付并验证的能力。</p>
+<hr>
+<h2>结论与局限</h2>
+<p>这条优化路径的价值不在于简单堆叠技巧，而在于让每类资源压力拥有相对明确的处理机制。</p>
+<ol>
+<li>
+<p><strong>长序列 MoE RL 的首要问题是可运行性与试验效率。</strong><br>
+   在 32 张 H100 上支持 128K 全局序列，是为多实验并行和快速试错建立稳定起点，不是讨论无限扩展集群后的峰值性能。</p>
+</li>
+<li>
+<p><strong>PP、TP、EP、CP 和重计算不能分别调优。</strong><br>
+   它们会共同改变静态显存、动态显存、kernel 粒度、暴露通信、CPU 开销和 local seq，单个可运行点不能提供单变量因果结论。</p>
+</li>
+<li>
+<p><strong>full recompute 用额外计算交换更大的 local seq。</strong><br>
+   材料给出的代价约为 30% 额外计算量；它直接缓解的是 activation 显存，不等于训练时间必然增加 30%。</p>
+</li>
+<li>
+<p><strong>Linear CE 与 FSDP2 分别处理两类不同峰值。</strong><br>
+   Linear CE 避免完整 fp32 logits 物化；FSDP2 分片参数、梯度和优化器状态，使静态显存不再主要依赖 PP、EP 承担。</p>
+</li>
+<li>
+<p><strong>chunked EP 通过 token 分块创造通信重叠窗口。</strong><br>
+   前向约 10.06→7.81 ms、反向 raw window 约 13.83→10.81 ms，只证明 16K critical rank 的局部时序改善，不能外推为完整训练 step 的平均加速。</p>
+</li>
+<li>
+<p><strong>整条组合路径有效，但单项收益不可从阶段差值中拆出。</strong><br>
+   代表性结果从 127.53 TFLOPS/GPU 推进到接近 190 TFLOPS/GPU；表格中的最终范围是 185.96–187.10 TFLOPS/GPU、37–38 GB。由于阶段间并行配置同时变化，不能据此计算各项技术的独立贡献。</p>
+</li>
+<li>
+<p><strong>recipe 和 primitive 分别缩小运行搜索半径与工程验证半径。</strong><br>
+   当前方案默认 EP=8，按每卡 16K–32K local seq 反推 CP，按需使用 PP=2，并默认收起 TP；工程上再将 loss、状态分片和 MoE 通信拆成可成对测试的 primitive。</p>
+</li>
+</ol>
+<p>最后必须保留三项证据边界：显存与 speedup sweep 只覆盖单个 sparse MoE layer 的 forward+backward；前后向 trace 只覆盖 16K critical rank；最终 recipe 只适用于当前模型、32 张 H100 和演讲实现语境。它是一套约束驱动的搜索方法，而不是所有长序列 MoE 训练任务的通用最优答案。</p>
+  </article>
+</main>
+<script>
+  const status = document.getElementById("status");
+  // Use the browser's native selection copy, the same path as copying from the
+  // website by hand; Zhihu only re-hosts pasted images reliably from that payload.
+  function copyNode(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    status.textContent = ok ? "已复制，去知乎编辑器粘贴即可。" : "已选中内容，请按 Ctrl/⌘+C 复制。";
+    if (ok) selection.removeAllRanges();
+  }
+  document.getElementById("copy-body").onclick = () => copyNode(document.getElementById("article"));
+  document.getElementById("copy-title").onclick = () => copyNode(document.getElementById("title"));
+</script>
+</body>
+</html>

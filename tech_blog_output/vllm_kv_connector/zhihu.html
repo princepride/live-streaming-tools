@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>解构 vLLM KV Connector：从调度解耦到全局零拷贝池化</title>
+<style>
+  :root { --ink:#1a1a1a; --muted:#8590a6; --line:#ebebeb; --accent:#056de8; --code:#f6f6f6; --bg:#fff; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .bar { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+          padding:10px 16px; background:#f8f9fb; border-bottom:1px solid var(--line); font-size:14px; }
+  .bar button { padding:6px 14px; border:1px solid var(--accent); border-radius:4px; cursor:pointer;
+                 background:var(--accent); color:#fff; font-size:14px; }
+  .bar button.ghost { background:#fff; color:var(--accent); }
+  .bar .hint { color:var(--muted); }
+  main { max-width:690px; margin:0 auto; padding:24px 16px 80px; }
+  h1.title { font-size:26px; line-height:1.4; margin:8px 0 20px; }
+  #article h2 { font-size:22px; margin:32px 0 12px; }
+  #article h3 { font-size:19px; margin:24px 0 10px; }
+  #article img { max-width:100%; }
+  #article img[eeimg] { max-width:none; vertical-align:middle; }
+  #article p.pic { margin:16px 0 4px; text-align:center; }
+  #article .formula { text-align:center; overflow-x:auto; }
+  #article blockquote { margin:16px 0; padding:0 14px; border-left:3px solid #d3d3d3; color:#646464; }
+  #article pre { background:var(--code); padding:12px 14px; overflow-x:auto; border-radius:4px; font-size:14px; }
+  #article code { background:var(--code); padding:1px 4px; border-radius:3px; font-size:0.92em; }
+  #article pre code { background:none; padding:0; }
+  #article table { border-collapse:collapse; margin:16px 0; font-size:14px; display:block; overflow-x:auto; }
+  #article th, #article td { border:1px solid var(--line); padding:6px 10px; vertical-align:top; }
+  #article th { background:#f6f6f6; }
+  #article hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="copy-body">复制正文</button>
+  <button id="copy-title" class="ghost">复制标题</button>
+  <span class="hint" id="status">图片使用 GitHub Pages 外链，公式为知乎公式图片。在知乎编辑器正文处粘贴（Ctrl/⌘+V）。</span>
+</div>
+<main>
+  <h1 class="title" id="title">解构 vLLM KV Connector：从调度解耦到全局零拷贝池化</h1>
+  <article id="article">
+<p><strong>原视频</strong>：<a href="https://www.bilibili.com/video/BV1gRNF6PEc3">KV Connector 的前世今生</a> · <strong>配套资料</strong>：<a href="https://drive.google.com/file/d/12YJ1xuPpLhBu2Lil-JGJM249FX0y4Ufy/view">vLLM KV Connector Mini Lesson</a></p>
+<p>当大模型推理从单轮问答走向多轮 Agent 交互，KV Cache 的规模随对话轮次持续膨胀，单机显存很快捉襟见肘。将 KV Cache 搬出引擎、跨节点共享、按需加载——这件事听起来直觉明了，工程上却要求推理引擎在调度、传输和存储三个维度同时给出干净的抽象。vLLM 的 KV Connector 正是为此而生的接口层。本文沿着它从 v0 到 v1 的架构演进，逐层拆解异步传输的三种范式，最终落脚到 LMCache 与 Mooncake 两个生态系统如何借助 CudaIPC 和 GPUDirect RDMA 实现零拷贝全局池化。</p>
+<p><strong>适读人群：</strong> 具有一定大模型推理基础，希望深入了解 vLLM 底层架构、KV Cache 优化机制及分布式存储系统集成的后端工程师与系统架构师。</p>
+<p><strong>前置知识：</strong></p>
+<ul>
+<li><strong>KV Cache</strong>（Key-Value Cache）：大模型推理过程中缓存的键值对，用于避免对已处理 token 的重复计算。</li>
+<li><strong>Prefill-Decode（PD）</strong>：大模型推理的两个阶段。Prefill 一次性处理全部输入 token，计算密集；Decode 逐 token 生成，访存密集。</li>
+<li><strong>vLLM</strong>：高性能大语言模型推理引擎，本文讨论的核心系统。</li>
+<li><strong>chunked prefill</strong>（分块预填充）：将一个请求的 prefill 拆分成多个 step 执行的机制，在 vLLM v1 中成为默认配置。</li>
+<li><strong>LMCache</strong>：独立的 KV Cache 管理层，采用守护进程模式与推理引擎协作。</li>
+<li><strong>Mooncake</strong>：以 KV Cache 为中心的分布式存储系统，支持 PD 分离与全局 KV Cache 池化。</li>
+</ul>
+<p><strong>阅读目标：</strong></p>
+<ol>
+<li>理解大模型推理中 KV Cache 外部化的工程背景与演进动力。</li>
+<li>掌握 vLLM v1 KV Connector 的非侵入式注入架构及调度解耦原理。</li>
+<li>深入剖析隐藏 I/O 延迟的三种异步传输范式：逐层传输、请求级异步与 L2 预取。</li>
+<li>了解 LMCache 与 Mooncake 如何利用 CudaIPC 和 RDMA 实现零拷贝全局池化。</li>
+</ol>
+<hr>
+<h2>一、长上下文时代的 KV Cache 危机与早期探索</h2>
+<blockquote>
+<p><strong>本节要回答的问题：</strong> 为什么大模型推理需要将 KV Cache 搬到引擎外部？vLLM v0 中的早期方案为何在架构演进后走进死胡同？</p>
+</blockquote>
+<h3>1.1 多轮对话下的 KV Cache 膨胀</h3>
+<p>在传统单轮问答场景中，prefill 的开销是一次性的。然而，当业务形态转向 <strong>Agentic Workloads</strong>——模型在多轮交互中持续调用工具、检索上下文、再次推理——每一轮都会在已有 prompt 上追加新内容，累积的 prefill token 数量随轮次显著增长。如果每轮都从头计算 KV Cache，prefill 延迟将迅速成为端到端响应的瓶颈。</p>
+<p>核心问题随之浮出水面：<strong>能否把上一轮甚至跨请求计算好的 KV Cache 保留下来，直接复用？</strong></p>
+<p>引擎内部的前缀缓存（prefix caching）只能覆盖同一实例、同一进程内的场景。一旦涉及 PD 分离部署或跨节点调度，KV Cache 就必须被"搬出去"——写入外部存储、网络传输到另一台机器、再加载回 GPU。这正是外部 KV Cache 需求的本质来源。</p>
+<h3>1.2 CacheGen 的启发与 v0 的尝试</h3>
+<p>学术界对这一方向的早期代表是 <strong>CacheGen</strong>（发表于 SIGCOMM 2024），它提出了基于 chunk 的 KV Cache 压缩与外部存储机制。这项工作最初在 HuggingFace Transformers 上实现原型，为了接入真实的高性能推理引擎，研究者将其集成进 vLLM——这也是 vLLM 开发 KV Connector 的最初动机。</p>
+<p>在 vLLM v0 版本中，整个引擎运行在单进程内，每个请求执行完整的逐请求 prefill。在这种相对简单的架构下，KV Connector 的实现策略是：<strong>魔改 attention metadata，欺骗 Worker 使其认为相关 token 已命中缓存，从而跳过重复的 prefill 计算。</strong> 好处是对核心代码侵入极小——不需要改调度器或模型前向逻辑，只需在 attention 层的元数据上动手脚。</p>
+<p>但隐患同样明显：这种"伪装 cache hit"的技巧与 attention 后端的内部数据结构高度耦合。每换一种后端，metadata 格式都不同，维护成本随后端种类线性增长。</p>
+<h3>1.3 架构大迁移：三座大山</h3>
+<p>vLLM 从 v0 演进到 v1 时，底层架构发生了根本性变化，旧的 Connector 方案随之失效。下图概括了这次迁移带来的三个核心挑战：</p>
+<p><img alt="vLLM v0 到 v1 架构迁移面临的三座大山：Attention metadata 维护困难、Scheduler 与 Worker 进程分离、Chunked prefill 成为默认" src="https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/assets/slides/slide-06.png">
+<em>图注：vLLM v0→v1 架构迁移中 KV Connector 面临的三个关键挑战。来源：演讲 PPT 第 6 页</em></p>
+<p>图中左侧展示了架构演进方向：v0 的"单进程 · 逐请求 prefill"变为 v1 的"进程分离 · chunked prefill"。右侧三个挑战逐一说明如下：</p>
+<table>
+<thead>
+<tr>
+<th>挑战</th>
+<th>v0 状态</th>
+<th>v1 变化</th>
+<th>对旧 Connector 的冲击</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Attention metadata 维护</strong></td>
+<td>单一后端，魔改可控</td>
+<td>MLA 等复杂 attention 出现，每种 metadata 结构不同</td>
+<td>伪装 cache hit 越来越不可持续</td>
+</tr>
+<tr>
+<td><strong>Scheduler 与 Worker 分离</strong></td>
+<td>同一进程直接通信</td>
+<td>调度和执行拆到不同进程</td>
+<td>需要显式跨进程透传 Connector 状态，旧方案无此通道</td>
+</tr>
+<tr>
+<td><strong>chunked prefill 成为默认</strong></td>
+<td>一次性完成 prefill</td>
+<td>prefill 被拆成多个 step</td>
+<td>KV Cache 加载与保存时机碎片化，不再有单一触发点</td>
+</tr>
+</tbody>
+</table>
+<h3>1.4 因果链：旧方案为何不可持续</h3>
+<p>将上述因素串联：Agentic Workloads 使 KV Cache 复用成为刚需 → v0 选择最小侵入的 metadata 魔改方式 → v1 引入进程分离，跨进程传递 Connector 状态缺乏机制 → chunked prefill 成为默认，KV Cache 分步加载让旧方案无法感知中间状态 → MLA 等新型 attention 机制的涌现使按后端魔改的维护成本急剧上升。五个因素叠加，侵入式设计彻底走向死胡同。</p>
+<p><strong>核心教训：</strong> v0 方案把 Connector 逻辑嵌入了 attention 执行的细节中，而非建立在调度与执行之间的稳定抽象上。当底层架构剧烈变化时，这种耦合必然断裂。</p>
+<blockquote>
+<p><strong>边界说明：</strong> 演讲材料未给出 v0 Connector 的具体性能数据或所支持的 attention 后端列表，上述分析基于架构层面的定性推演。</p>
+</blockquote>
+<hr>
+<h2>二、解耦调度与执行：v1 KV Connector 的注入式设计</h2>
+<blockquote>
+<p><strong>本节要回答的问题：</strong> 在 Scheduler 与 Worker 运行于不同进程的 vLLM v1 架构下，"哪些 token 可以复用"的决策与"数据搬进搬出"的执行如何在进程边界上干净地分开？</p>
+</blockquote>
+<p>vLLM v1 的答案是<strong>注入而非侵入</strong>——在原生调度和执行流程的固定阶段插入接口调用，而不修改 Scheduler 或 Worker 已有的核心逻辑。</p>
+<h3>2.1 端到端工作流全景</h3>
+<p>下图展示了一次完整请求经过 KV Connector 的全生命周期。理解这张图是把握后续所有异步优化的前提——后续范式本质上都是在这条基线流程上做时间维度的重叠。</p>
+<p><img alt="vLLM v1 KV Connector 端到端工作流：Scheduler 进程负责查询命中、分配 blocks 并打包元数据，Worker 进程接收后依次执行 load、forward、store" src="https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/assets/slides/slide-08.png">
+<em>图注：vLLM v1 KV Connector 端到端工作流。上半部分为 Scheduler 进程，下半部分为 Worker 进程，底部为外部 KV Cache 存储。来源：演讲 PPT 第 8 页</em></p>
+<p>图中自上而下包含以下关键元素与流转：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">序号</th>
+<th style="text-align: center;">所在进程</th>
+<th>操作</th>
+<th>调用接口</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">①</td>
+<td style="text-align: center;">Scheduler</td>
+<td>询问外部命中数量</td>
+<td><code>get_num_new_matched_tokens()</code></td>
+<td>查询当前请求的 prompt 中有多少 token 的 KV 已被外部缓存</td>
+</tr>
+<tr>
+<td style="text-align: center;">②</td>
+<td style="text-align: center;">Scheduler</td>
+<td>分配 KV blocks</td>
+<td><code>update_state_after_alloc()</code></td>
+<td>决定哪些 block 从外部加载、哪些本地计算，并完成显存 block 分配</td>
+</tr>
+<tr>
+<td style="text-align: center;">③</td>
+<td style="text-align: center;">Scheduler</td>
+<td>打包元数据</td>
+<td><code>build_connector_meta()</code></td>
+<td>将命中信息、block 映射打包进 connector metadata，附加到 <code>SchedulerOutput</code></td>
+</tr>
+<tr>
+<td style="text-align: center;">④</td>
+<td style="text-align: center;">—</td>
+<td>跨进程消息</td>
+<td><code>SchedulerOutput + connector metadata</code></td>
+<td>序列化后发送给 Worker</td>
+</tr>
+<tr>
+<td style="text-align: center;">⑤</td>
+<td style="text-align: center;">Worker</td>
+<td>加载外部 KV</td>
+<td><code>start_load_kv()</code></td>
+<td>根据元数据从外部存储读入对应 block</td>
+</tr>
+<tr>
+<td style="text-align: center;">⑥</td>
+<td style="text-align: center;">Worker</td>
+<td>模型推理</td>
+<td><code>model.forward()</code></td>
+<td>正常前向计算，对 Connector 透明</td>
+</tr>
+<tr>
+<td style="text-align: center;">⑦</td>
+<td style="text-align: center;">Worker</td>
+<td>保存新 KV</td>
+<td><code>wait_for_save()</code></td>
+<td>将本轮新计算出的 KV 写回外部存储</td>
+</tr>
+</tbody>
+</table>
+<p>图中底部用双向箭头标注了 <strong>load</strong> 和 <strong>store</strong> 两条数据通路，均发生在 Worker 与外部存储之间。Scheduler 全程不触碰实际的 KV 数据。</p>
+<h3>2.2 Scheduler 侧：只做决策，不碰数据</h3>
+<p>Scheduler 在每个调度 step 中依次完成三件事：</p>
+<ol>
+<li><strong>查命中</strong>——调用 <code>get_num_new_matched_tokens()</code>，拿到一个整数，表示外部存储能提供多少 token 的 KV。命中越多，需要实际计算的就越少。</li>
+<li><strong>分 block</strong>——调用 <code>update_state_after_alloc()</code>，将命中 token 范围映射到物理 block 编号上。与 vLLM 原生 block 分配逻辑衔接，只是多了"这些 block 的内容将由外部填充"的标记。</li>
+<li><strong>打包元数据</strong>——调用 <code>build_connector_meta()</code> 序列化。元数据体积极小（block 编号列表、命中长度等），不含任何 KV 张量。</li>
+</ol>
+<p>三步完成后，connector metadata 附在 <code>SchedulerOutput</code> 上一并发出。对 Scheduler 的其余逻辑而言，这三个调用是<strong>纯粹的增量注入</strong>——不改变请求排序、抢占策略或 chunked prefill 的分片决策。</p>
+<h3>2.3 Worker 侧：只管搬运，不做决策</h3>
+<p>Worker 收到消息后按固定顺序执行：<strong>load → forward → store</strong>。<code>start_load_kv()</code> 读取元数据中标记的 block 列表，向外部存储发起搬运，目的地是 Scheduler 已分配好的本地显存 block；<code>model.forward()</code> 正常执行前向推理；<code>wait_for_save()</code> 将新产生的 KV 写回外部。</p>
+<p>整条链路的关键特性是：<strong>Worker 不持有任何"该不该命中"的判断逻辑</strong>，它看到的只是"从哪搬、搬到哪、搬多少"的指令集。</p>
+<h3>2.4 最小状态演进示例</h3>
+<p>假设一条请求的 prompt 包含 8 个 token，外部已缓存前 6 个 token 的 KV：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">阶段</th>
+<th style="text-align: center;">位置</th>
+<th>动作</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">查命中</td>
+<td style="text-align: center;">Scheduler</td>
+<td><code>get_num_new_matched_tokens()</code> 返回 6</td>
+<td>得知前 6 token 可外部获取</td>
+</tr>
+<tr>
+<td style="text-align: center;">分 block</td>
+<td style="text-align: center;">Scheduler</td>
+<td>为 8 token 分配 block，前 6 标记"外部填充"</td>
+<td>映射写入元数据</td>
+</tr>
+<tr>
+<td style="text-align: center;">load</td>
+<td style="text-align: center;">Worker</td>
+<td>搬入 6 token 的 KV</td>
+<td>显存对应 block 就绪</td>
+</tr>
+<tr>
+<td style="text-align: center;">forward</td>
+<td style="text-align: center;">Worker</td>
+<td>仅对第 7、8 token 执行 prefill</td>
+<td>KV Cache 完整覆盖 8 token</td>
+</tr>
+<tr>
+<td style="text-align: center;">store</td>
+<td style="text-align: center;">Worker</td>
+<td>新计算的 2 token KV 写回外部</td>
+<td>外部缓存更新为 8 token</td>
+</tr>
+</tbody>
+</table>
+<p>实际计算量从 8 token 降至 2 token，收益直接取决于外部命中率。</p>
+<h3>2.5 设计因果链与局限</h3>
+<ul>
+<li><strong>Scheduler 掌握全局视图</strong>（请求队列、block 空闲表、外部命中信息），由它做"复用还是计算"的决策。</li>
+<li><strong>Worker 掌握硬件通路</strong>（GPU 显存、PCIe / RDMA 链路），由它执行实际搬运。</li>
+<li><strong>connector metadata 是唯一的跨进程契约</strong>：体积小、语义明确、不含张量负载。</li>
+</ul>
+<p>新的外部存储后端只要实现上述六个接口，即可"插入"原有流程，Scheduler 无需关心 KV Cache 的物理位置。</p>
+<p>但值得注意的是，上述流程是<strong>同步语义</strong>的：load 在 forward 之前，store 在 forward 之后。这意味着 load 和 store 期间 GPU 处于等待状态。当外部存储延迟较高时，这段空转将成为吞吐瓶颈。要消除这一等待，就必须让数据搬运与 GPU 计算在时间上重叠。</p>
+<hr>
+<h2>三、打破 I/O 瓶颈：逐层传输与请求级异步</h2>
+<blockquote>
+<p><strong>本节要回答的问题：</strong> 外部 KV Cache 传输延迟往往达到毫秒级。如何把传输时间藏进计算时间，让 GPU 尽可能不停下来？</p>
+</blockquote>
+<p>vLLM KV Connector 先后落地了两种范式：<strong>逐层传输（Layer-wise Transfer）</strong> 与<strong>请求级异步（Request-level Async）</strong>。两者在"对调度器的侵入程度"和"能隐藏的传输量"之间形成明显取舍。</p>
+<h3>3.1 范式一：逐层传输——对调度器完全透明</h3>
+<p>核心思路：不必等所有层的 KV Cache 全部到位才开始计算，每传完一层就立即执行该层的前向推理，同时后台继续搬运下一层。</p>
+<p>在此模式下，Scheduler 无需任何修改——它像往常一样下发请求，KV Connector 在 Worker 内部自行完成"传一层、算一层"的流水线。这是 v1 KV Connector 最早内置的方案。</p>
+<p><strong>边界条件：</strong> 流水线只在"单层传输时间 ≤ 单层计算时间"时才能完全隐藏延迟。一旦网络带宽不足导致单层传输耗时超过单层计算耗时，GPU 仍会在该层计算结束后等待数据就绪。</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>逐层传输</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>调度器改动</td>
+<td>无</td>
+</tr>
+<tr>
+<td>传输粒度</td>
+<td>每层 KV</td>
+</tr>
+<tr>
+<td>隐藏延迟上限</td>
+<td>受限于最慢一层的传输耗时</td>
+</tr>
+<tr>
+<td>显存占用特征</td>
+<td>逐层释放/写入，无额外预留</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>高带宽互联（NVLink、RDMA 等）或 KV 较小的短序列</td>
+</tr>
+</tbody>
+</table>
+<p>当网络较慢时，逐层方案无法根治空转——需要把重叠粒度从层级提升到请求级。</p>
+<h3>3.2 范式二：请求级异步——加载期间先跑别的请求</h3>
+<p>请求级异步把视角从"同一请求内部的层间流水线"拉高到"不同请求之间的时间片交叠"。下图展示了这一范式的时序逻辑——关键在于理解"异步挂起"与"就绪恢复"两个信号如何衔接调度器和 Worker。</p>
+<p><img alt="请求级异步时序图：请求 A 异步加载 KV 时，GPU 先计算请求 B 和 C，加载完成后请求 A 才进入计算" src="https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/assets/slides/slide-11.png">
+<em>图注：Request-level Async 的时序与三步信号流程。来源：演讲 PPT 第 11 页</em></p>
+<p>图中的时序可以拆解为三个步骤：</p>
+<ol>
+<li><strong>返回异步加载信号</strong> —— KV Connector 收到某请求（图中 Request A）的加载需求后，通过 <code>get_num_new_matched_tokens()</code> 向调度器返回一个异步标记："数据还没到，但已在搬运"。</li>
+<li><strong>预留显存，挂起请求</strong> —— Scheduler 为该请求提前分配 GPU blocks 用于后续写入，但<strong>不</strong>让 GPU 等待这些块被填满。GPU 转去执行其他已就绪的请求（图中 B、C）。</li>
+<li><strong>加载完成，下轮调度</strong> —— Worker 后台写入完成后通知 Scheduler，该请求在下一轮调度中参与正常计算。</li>
+</ol>
+<p><strong>最小场景：</strong> batch 包含 A、B、C 三个请求，A 需从远端拉取 KV Cache。无异步时，GPU 等 A 的 KV 全部到位 → 计算 A → 计算 B → C，传输时间完全暴露。有请求级异步时，A 返回异步信号，GPU 先计算 B 和 C，与此同时 A 的 KV 在后台搬运。若 B、C 计算结束时 A 也加载完毕，下一轮直接开始——传输延迟被 B、C 的计算时间吸收。</p>
+<h3>3.3 代价与边界</h3>
+<p>请求级异步显著提升了 GPU 利用率，但伴随两个不可忽视的代价：</p>
+<table>
+<thead>
+<tr>
+<th>代价</th>
+<th>具体表现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>调度器复杂度飙升</strong></td>
+<td>Scheduler 必须理解"请求正在异步加载"这一新状态，维护就绪/未就绪队列，处理加载失败回滚等边界情况</td>
+</tr>
+<tr>
+<td><strong>显存长期占用</strong></td>
+<td>预留的 GPU blocks 在整个传输期间被占住却不产出推理结果；慢速网络或并发异步请求过多时，可用显存迅速收紧</td>
+</tr>
+</tbody>
+</table>
+<p>该机制由 RedHat 工程师在 v1 KV Connector 上后续贡献落地。当外部链路延迟进一步增大，"占着显存等传输"的模式会成为新的资源瓶颈，系统需要更精细的预取策略来解耦显存分配与数据搬运。</p>
+<hr>
+<h2>四、显存保卫战：L2 预取机制的精妙实现</h2>
+<blockquote>
+<p><strong>本节要回答的问题：</strong> 当 KV Cache 位于远端且网络延迟高达数十毫秒时，如何让慢速传输彻底不占用 GPU 显存？</p>
+</blockquote>
+<h3>4.1 两阶段搬运 + 调度欺骗</h3>
+<p><strong>L2 Prefetching</strong>（L2 预取）的核心策略拆成两步：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>动作</th>
+<th style="text-align: center;">GPU 显存开销</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 后台预取</td>
+<td>远端数据搬运到 <strong>CPU 内存</strong> 的 prefetch 缓冲区</td>
+<td style="text-align: center;"><strong>零</strong></td>
+</tr>
+<tr>
+<td>② 就绪加载</td>
+<td>缓冲数据从 CPU 拷贝到 <strong>GPU 显存</strong> 的 paged KV cache</td>
+<td style="text-align: center;">此时才分配 GPU blocks</td>
+</tr>
+</tbody>
+</table>
+<p>关键在于：阶段 ① 期间，Scheduler 完全不知道该请求需要显存。实现这一效果的手段是让匹配函数 <code>get_num_new_matched_tokens()</code> 在数据尚未就绪时<strong>返回 <code>None</code></strong>。</p>
+<h3>4.2 架构与数据流</h3>
+<p>下图展示了 L2 Prefetching 的三层数据流——理解"为什么要多加一层 CPU 缓冲"以及"返回 None 的实际效果"是本节重点。</p>
+<p><img alt="L2 预取范式的三层数据流：远端存储经 CPU prefetch 缓冲最终到达 GPU 显存，以及匹配函数返回 None 的调度欺骗技巧" src="https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/assets/slides/slide-12.png">
+<em>图注：L2 Prefetching 的整体架构与实现技巧。来源：演讲 PPT 第 12 页</em></p>
+<p>图中三个层级：</p>
+<ul>
+<li><strong>最右侧：远端存储 / 磁盘（L2）</strong> —— KV Cache 的"远处"，网络延迟不可忽视。</li>
+<li><strong>中间层：CPU 内存 prefetch 缓冲</strong> —— 承担中转角色，容量充裕且不消耗 GPU 显存配额。</li>
+<li><strong>最左侧：GPU 显存 paged KV cache</strong> —— 最终计算所需的位置，也是最稀缺的资源。</li>
+</ul>
+<p>箭头 ① 标注为"后台进行，不占显存"，由异步 I/O 完成，对 Scheduler 透明。箭头 ② 标注为"就绪后加载，此时才分配 GPU blocks"——只有 CPU 缓冲中的数据完整就绪，框架才向 Scheduler 报告匹配 token 数量，触发资源分配。</p>
+<h3>4.3 匹配函数返回 None 的因果链</h3>
+<ol>
+<li><strong>请求到达</strong>：Scheduler 对每个待调度请求调用 <code>get_num_new_matched_tokens()</code>。</li>
+<li><strong>预取未完成</strong>：函数检测到 CPU prefetch 缓冲尚未就绪，返回 <code>None</code>。</li>
+<li><strong>Scheduler 跳过</strong>：<code>None</code> 的语义等价于"先别调度我"。Scheduler 不为该请求分配任何 GPU blocks，直接处理队列中的其他请求。</li>
+<li><strong>后台传输持续</strong>：远端数据正在向 CPU 内存搬运，不干扰 GPU 侧操作。</li>
+<li><strong>预取完成</strong>：CPU 缓冲就绪后，下一轮调度时函数返回实际匹配的 token 数。</li>
+<li><strong>资源分配与加载</strong>：Scheduler 正常分配 GPU blocks，CPU → GPU 拷贝完成后请求进入计算流水线。</li>
+</ol>
+<p><strong>显存占用时间被压缩到了"CPU→GPU 拷贝 + 计算"这一段</strong>，完全跳过了耗时最长的"远端→CPU"阶段。</p>
+<h3>4.4 最小状态演进</h3>
+<p>系统中有请求 A（正在 decode）和请求 B（需从远端加载 KV Cache）：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">调度轮次</th>
+<th>请求 B 匹配函数返回值</th>
+<th>Scheduler 对 B 的处理</th>
+<th style="text-align: center;">GPU 显存分配给 B？</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">t=1</td>
+<td><code>None</code>（预取刚开始）</td>
+<td>跳过</td>
+<td style="text-align: center;">否</td>
+</tr>
+<tr>
+<td style="text-align: center;">t=2</td>
+<td><code>None</code>（预取进行中）</td>
+<td>跳过</td>
+<td style="text-align: center;">否</td>
+</tr>
+<tr>
+<td style="text-align: center;">t=3</td>
+<td><code>512</code>（预取完成）</td>
+<td>正常调度，分配 blocks</td>
+<td style="text-align: center;">是</td>
+</tr>
+</tbody>
+</table>
+<p>在 t=1 和 t=2 两轮中，原本会被 B 锁定的显存块全部留给了活跃请求。</p>
+<h3>4.5 收益与适用边界</h3>
+<p><strong>收益：</strong> 慢速传输期间显存零占用，GPU 显存全部服务于正在计算的请求。</p>
+<p><strong>边界条件：</strong></p>
+<ul>
+<li>该范式假设 CPU 内存有足够空间充当 prefetch 缓冲。大量请求同时预取时，CPU 内存可能成为新瓶颈——演讲材料未给出缓冲区容量管理策略细节。</li>
+<li>返回 <code>None</code> 意味着请求的首次响应延迟（TTFT, Time To First Token）会增加一个完整的预取周期。对延迟敏感的在线场景需权衡命中率与预取开销。</li>
+<li>该思路源自 Dynamo 团队的设计理念，首先在 LMCache 中落地实现。</li>
+</ul>
+<p>有了完善的异步传输接口，vLLM 具备了接入强大外部缓存系统的能力。LMCache 正是首个深度整合的独立管理层。</p>
+<hr>
+<h2>五、走向独立守护进程：LMCache 的零竞争架构</h2>
+<blockquote>
+<p><strong>本节要回答的问题：</strong> 当 KV Cache 管理组件与推理引擎运行在同一 Python 进程里，GIL 竞争和视野受限是两个绕不开的结构性问题。LMCache 如何摆脱这些瓶颈？</p>
+</blockquote>
+<h3>5.1 Library 模式的结构性瓶颈</h3>
+<p>多数 KV Cache 管理库采用 <strong>Library 模式</strong>：将自身加载为 serving engine 进程内的一个模块。部署简单，但带来三层递进问题：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Library 模式表现</th>
+<th>根因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>GIL（Global Interpreter Lock，全局解释器锁）竞争</strong></td>
+<td>KV 搬运的 Python 调度代码与 model forward 争抢同一把 GIL</td>
+<td>同一进程，单 GIL</td>
+</tr>
+<tr>
+<td><strong>视野受限</strong></td>
+<td>每个库实例只能看到宿主进程持有的 GPU block</td>
+<td>进程隔离</td>
+</tr>
+<tr>
+<td><strong>不可独立管理</strong></td>
+<td>无法对 KV 层单独做监控、升级或重启</td>
+<td>生命周期绑定宿主</td>
+</tr>
+</tbody>
+</table>
+<p>即使 KV 搬运本身在 GPU 上异步执行，Python 层面的元数据操作和回调仍需获取 GIL。并发量上升时，这些微小阻塞会累积为可观测的尾延迟抖动。同一台机器部署两个 vLLM 实例时，两个 KV Library 各自为政，无法共享缓存条目，造成显存浪费和命中率下降。</p>
+<h3>5.2 MP 守护进程架构</h3>
+<p>LMCache 摒弃了进程内模式，采用 <strong>MP 模式（Multi-Process 模式）</strong>——将 KV Cache 管理逻辑抽离为每节点一个独立的守护进程（daemon），通过 <strong>CudaIPC</strong>（CUDA Inter-Process Communication，CUDA 进程间通信）与 vLLM 共享 GPU buffer。</p>
+<p>下图将两种架构并排呈现，重点关注右侧 LMCache daemon 如何同时连接多个 vLLM 实例。</p>
+<p><img alt="LMCache MP 模式与传统 Library 模式的架构对比" src="https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/assets/slides/slide-16.png">
+<em>图注：左侧为传统 Library 模式，KV Library 嵌入 vLLM 进程内部；右侧为 LMCache MP 模式，独立守护进程通过 CudaIPC 连接多个 vLLM 实例。来源：演讲 PPT 第 16 页</em></p>
+<p>左侧每个 vLLM process 内部各包含一个 KV Library 方块——彼此不可见。右侧的关键变化是：<strong>LMCache MP Process</strong> 被提取到所有 vLLM 进程的外部，以 daemon 形式运行，通过连线与多个 vLLM process 相连，连线代表 CudaIPC。</p>
+<h3>5.3 协作流程</h3>
+<ol>
+<li><strong>vLLM 发起请求</strong> —— Scheduler 决定某请求需要读写 KV Cache 时，vLLM 进程通过轻量 RPC 指令通知 LMCache daemon，指令中包含目标 block 的 token hash 及 GPU buffer 地址。</li>
+<li><strong>CudaIPC 映射</strong> —— daemon 利用 CudaIPC 直接获得 vLLM 所持 GPU buffer 的映射句柄，在自己的进程上下文中读写该显存区域，不经过 CPU 侧内存中转。</li>
+<li><strong>零拷贝搬运</strong> —— daemon 在自己的 CUDA stream 上发起传输。由于操作完全在 daemon 进程内完成，vLLM 进程的 GIL 不会被触碰。</li>
+<li><strong>完成通知</strong> —— 搬运结束后，daemon 通过 RPC 回调告知 vLLM，后者在下一次调度循环中更新 block 元数据。</li>
+</ol>
+<p>vLLM 进程只承担"发指令"和"收通知"两个极轻量操作，KV 数据的实际移动全部卸载给 daemon。</p>
+<h3>5.4 三项架构收益</h3>
+<ul>
+<li><strong>无干扰</strong> —— daemon 拥有独立的 Python 解释器和 GIL，即使执行复杂缓存淘汰策略，也不与 model forward 产生锁竞争。</li>
+<li><strong>全局视野</strong> —— 单个 daemon 连接同节点所有 vLLM 实例，能建立统一的 block 映射表。第二个 vLLM 实例请求相同 prefix 时，daemon 可通过 CudaIPC 直接从第一个实例的 buffer 读取，无需重新计算。</li>
+<li><strong>可被管理</strong> —— daemon 以独立进程身份存在，可暴露缓存预热、手动淘汰、统计查询等专属管理接口。</li>
+</ul>
+<h3>5.5 最小场景</h3>
+<p>同一节点运行 vLLM 实例 A 和 B，共享一个 LMCache daemon：</p>
+<ol>
+<li>实例 A 处理一条长 system prompt，prefill 完成后 daemon 记录该 prefix 对应的 GPU block 地址。</li>
+<li>实例 B 收到相同 system prompt 的新请求，Scheduler 向 daemon 查询，发现 A 的 GPU buffer 中已有匹配 KV。</li>
+<li>daemon 通过 CudaIPC 从 A 的显存映射读取，写入 B 的目标 block。不涉及 CPU 内存拷贝，A 和 B 的 model forward 均不被阻塞。</li>
+</ol>
+<h3>5.6 边界</h3>
+<p>CudaIPC 要求参与通信的 GPU 位于同一物理节点（或至少同一 PCIe/NVLink 域）。当 KV Cache 需要跨节点流转时，本地 CudaIPC 路径不再适用，需要借助 RDMA 等网络传输手段。此外，演讲材料未给出 LMCache daemon 在高并发场景下的具体吞吐或延迟基准数据，实际性能表现有待独立测评验证。</p>
+<hr>
+<h2>六、全局池化与硬件加速：Mooncake 的 RDMA 零拷贝实践</h2>
+<blockquote>
+<p><strong>本节要回答的问题：</strong> 在跨节点 PD 分离架构中，如何实现极致的 KV Cache 传输性能？</p>
+</blockquote>
+<h3>6.1 跨节点传输的瓶颈</h3>
+<p>PD 分离架构下，Prefill 节点完成计算后需将 KV Cache 传递给 Decode 节点。传统路径中，数据必须先从 GPU 显存拷贝到主机内存（CPU DRAM），由 CPU 发起网络传输，对端收到后再从主机内存拷入 GPU。每次跨节点搬运至少经历<strong>两次 PCIe 拷贝 + 一次网络传输</strong>，CPU 全程参与。对于动辄数百 MB 的 KV Cache，这条路径很快成为吞吐瓶颈。</p>
+<p>Mooncake 给出的答案是：<strong>将 GPU 显存直接注册为 RDMA（Remote Direct Memory Access，远程直接内存访问）缓冲区，借助 GPUDirect RDMA 在硬件层面完成端到端零拷贝传输。</strong></p>
+<h3>6.2 MooncakeStoreConnector 的两层分工</h3>
+<p>下图展示了 MooncakeStoreConnector 的系统架构，核心在于理解调度侧和 Worker 侧如何分别与 Mooncake 基础设施交互，以及数据平面那条绕过 CPU 的直连箭头。</p>
+<p><img alt="MooncakeStoreConnector 架构：调度侧与 Worker 侧通过 Mooncake 主节点和 RDMA 网络实现 KV Cache 的全局池化与零拷贝传输" src="https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/assets/slides/slide-31.png">
+<em>图注：MooncakeStoreConnector 的系统架构与数据平面。来源：演讲 PPT 第 31 页</em></p>
+<p>图中两条独立路径：</p>
+<table>
+<thead>
+<tr>
+<th>层面</th>
+<th>角色</th>
+<th>核心动作</th>
+<th>交互对象</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>调度侧</strong></td>
+<td>决策者</td>
+<td>对提示词分块哈希，向 Mooncake Master 查询 KV Cache 命中</td>
+<td>Mooncake Master（元数据节点）</td>
+</tr>
+<tr>
+<td><strong>Worker 侧</strong></td>
+<td>执行者</td>
+<td>嵌入 Mooncake 客户端，后台线程异步完成实际传输</td>
+<td>分布式 KV Cache 池及其他 GPU 节点</td>
+</tr>
+</tbody>
+</table>
+<p>数据平面箭头直接连接 <strong>GPU HBM</strong> 和 <strong>Mooncake Distributed KV Cache Pool</strong>，标注为 "GPUDirect over RDMA Network Fabric"——这条路径绕过了 CPU。</p>
+<h3>6.3 GPUDirect RDMA 的三步因果链</h3>
+<p>RDMA 允许一台机器的网卡直接读写另一台机器的内存，不经过任何一方的 CPU。<strong>GPUDirect RDMA</strong> 在此基础上更进一步：网卡可以直接访问 GPU 显存，省去 GPU → 主机内存的中间拷贝。</p>
+<p>MooncakeStoreConnector 在 Worker 侧的做法：</p>
+<ol>
+<li><strong>注册阶段</strong>：vLLM Worker 启动后，将本地 KV Cache 所在的 GPU 显存区域注册为 RDMA 缓冲区（RDMA buffer），告知网卡和操作系统"这片显存可被远端直接读写"。</li>
+<li><strong>传输阶段</strong>：Mooncake 的 Transfer Engine（TE）以后台线程运行，通过 RDMA 动词（verb）直接在两端 GPU HBM 之间建立数据通道。<strong>无需 SM 参与或 CPU 中转。</strong></li>
+<li><strong>完成确认</strong>：RDMA 操作完成后，网卡通过完成队列（Completion Queue）通知 Mooncake 客户端，后者再通知 vLLM Worker 该 KV Cache 已就绪。</li>
+</ol>
+<p>传输速度上限不再取决于 CPU 吞吐或 PCIe 拷贝次数，而是<strong>直接受限于底层 RDMA 网络带宽</strong>。</p>
+<h3>6.4 最小例子：跨节点 Prefill→Decode 搬运</h3>
+<p>节点 A 专职 Prefill，节点 B 专职 Decode，两者通过 RDMA 网络互联。</p>
+<p><strong>第一步：调度侧查询。</strong> 节点 B 的 Scheduler 对提示词分块计算哈希值，向 Mooncake Master 查询：这些 KV 块是否已存在于全局缓存池中？若命中，得知数据位于节点 A 的 GPU 0 上。</p>
+<p><strong>第二步：Worker 侧传输。</strong> 节点 B 的 Worker 中嵌入的 Mooncake 客户端发起 RDMA Read：</p>
+<pre><code>节点 A GPU HBM（源端，已注册为 RDMA buffer）
+        │
+        │  GPUDirect RDMA Read（网卡直接读取 GPU 显存）
+        ▼
+   RDMA 网络（InfiniBand / RoCE）
+        │
+        │  GPUDirect RDMA Write（网卡直接写入 GPU 显存）
+        ▼
+节点 B GPU HBM（目的端，已注册为 RDMA buffer）
+</code></pre>
+<p>在这条路径中：节点 A 的 CPU 不参与搬运；节点 B 的 CPU 不参与搬运；双方 GPU SM 不被占用，可继续执行其他推理计算。</p>
+<p><strong>第三步：就绪通知。</strong> RDMA 传输完成后，节点 B 的 Worker 收到通知，Decode 阶段立即使用到位的 KV Cache，无需额外显存内拷贝。</p>
+<h3>6.5 性能优势与边界</h3>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>传统路径</th>
+<th>Mooncake GPUDirect RDMA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPU→主机内存拷贝</td>
+<td>需要</td>
+<td><strong>省去</strong></td>
+</tr>
+<tr>
+<td>CPU 参与网络发送</td>
+<td>需要</td>
+<td><strong>省去</strong></td>
+</tr>
+<tr>
+<td>主机内存→GPU 拷贝</td>
+<td>需要</td>
+<td><strong>省去</strong></td>
+</tr>
+<tr>
+<td>SM 占用</td>
+<td>可能</td>
+<td><strong>无</strong></td>
+</tr>
+<tr>
+<td>传输带宽上限</td>
+<td>受 PCIe + CPU 调度限制</td>
+<td>受 RDMA 网络带宽限制</td>
+</tr>
+</tbody>
+</table>
+<p><strong>边界条件：</strong></p>
+<ul>
+<li>GPUDirect RDMA 要求网卡和 GPU 均支持该特性，且两者最好位于同一 PCIe 交换域以获得最佳性能。并非所有部署环境满足此条件。</li>
+<li>演讲材料未给出具体的带宽数字或延迟基准测试数据，实际传输速率取决于网络拓扑、网卡型号和 RDMA 协议类型（InfiniBand vs. RoCE）。</li>
+<li>Mooncake 的分布式 KV Cache 池支持 CPU/DRAM/SSD 多级存储。当 KV Cache 从非 GPU 层级加载时，是否仍能维持完整的零拷贝语义，需结合具体部署验证。</li>
+</ul>
+<hr>
+<h2>七、KV Cache Stack 的崛起与工程边界</h2>
+<blockquote>
+<p><strong>本节核心问题：</strong> 当 KV Cache 从推理引擎的内部状态演变为独立基础设施层，系统获得了什么？在真实部署中又会碰到哪些物理天花板与工程代价？</p>
+</blockquote>
+<h3>7.1 范式转变：计算与数据的正交扩展</h3>
+<p>纵观前文所有机制——Connector 接口、异步传输范式、全局零拷贝池化——它们最终指向同一个架构愿景：<strong>将 KV Cache 视为一个可独立演进的数据层。</strong> 下图把这一愿景具象化为两个正交扩展的平面。</p>
+<p><img alt="KV Cache Stack 架构示意：左侧为可横向扩展的 vLLM 推理引擎集群，右侧为独立的 KV Cache 分布式数据层，两者通过请求级接口双向通信" src="https://princepride.github.io/live-streaming-tools/vllm_kv_connector/final/assets/slides/slide-19.png">
+<em>图注：KV Cache Stack 概念架构。来源：演讲 PPT 第 19 页</em></p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>左侧：推理引擎集群</th>
+<th>右侧：KV Cache Stack</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>扩展策略</td>
+<td><strong>Replicate Compute</strong> — 横向复制实例</td>
+<td><strong>Distribute Data</strong> — 分布式存储与多级缓存</td>
+</tr>
+<tr>
+<td>优化目标</td>
+<td>计算吞吐与 GPU 利用率</td>
+<td>I/O 带宽与存储命中率</td>
+</tr>
+<tr>
+<td>请求类型</td>
+<td>"帮我推理请求 X"</td>
+<td>"查询 / 删除 / 固定请求 Y 的 KV Cache"</td>
+</tr>
+<tr>
+<td>运维粒度</td>
+<td>实例级弹性伸缩</td>
+<td>请求级管理与可观测性</td>
+</tr>
+</tbody>
+</table>
+<p>两侧通过双向箭头连接。推理引擎只需关心"发起推理"与"声明 KV Cache 操作"，数据如何存放、路由和淘汰全部下沉到 Stack 层。这正是 PD 分离得以落地的底层前提：Prefill 节点产出 KV Cache 写入 Stack，Decode 节点从 Stack 拉取，二者无需共享 GPU 显存甚至物理机器。</p>
+<p>因果链：KV Cache 独立成层 → 计算节点无状态化 → 引擎实例可按需水平扩展 → Prefill 与 Decode 各自配置最优硬件比例 → 整体推理成本下降。</p>
+<h3>7.2 物理约束：带宽决定上限</h3>
+<p>零拷贝和异步传输能消除 CPU 侧的多余开销，但最终吞吐被网络硬件拓扑锁死。需要注意的边界情形：</p>
+<ul>
+<li><strong>非 RDMA 网络退化：</strong> 在普通 TCP/IP 链路上，零拷贝语义仍然可用，但实际带宽可能降低一个数量级，PD 分离的时延收益会被传输瓶颈抵消。</li>
+<li><strong>多级存储冷热不均：</strong> KV Cache Stack 支持 GPU 显存、主机内存、远端存储等多级层次。热点请求集中在低速层时，统计上的缓存命中率优势并不能掩盖单次 miss 带来的长尾延迟。</li>
+</ul>
+<blockquote>
+<p>演讲材料未给出具体的网络带宽阈值或退化曲线数据，部署时应针对实际拓扑做基准测试。</p>
+</blockquote>
+<h3>7.3 工程代价：异步复杂度的蔓延</h3>
+<p>KV Cache 生命周期从引擎内部剥离后，Scheduler 需要额外维护的状态显著增加：</p>
+<ol>
+<li><strong>传输状态追踪</strong> — 每个请求的 KV Cache 可能处于"发送中 / 已到达 / 校验失败 / 已固定"等多种中间态，Scheduler 必须为每种状态设计回退路径。</li>
+<li><strong>请求级管理</strong> — Stack 层要支持"查询、删除、固定"三类操作，Scheduler 不仅要编排 GPU 算力，还要编排分布式缓存的引用计数与淘汰策略。</li>
+<li><strong>可观测性成本</strong> — 独立数据层需要自己的监控指标（命中率、传输延迟、存储水位），与推理引擎的指标体系合并后，运维维度至少翻倍。</li>
+</ol>
+<p>这三项开销在单机部署中几乎不可感知，但在数十乃至上百个引擎实例的集群里，会成为系统可靠性的主要挑战点。</p>
+<h3>7.4 部署评估建议</h3>
+<table>
+<thead>
+<tr>
+<th>评估维度</th>
+<th>关注指标</th>
+<th>不满足时的退路</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>网络带宽</td>
+<td>节点间单向带宽是否足以在一个 Decode step 内完成 KV 传输</td>
+<td>回退至同机 PD 共置，放弃分离收益</td>
+</tr>
+<tr>
+<td>调度复杂度</td>
+<td>Scheduler 异步回调链深度与异常恢复覆盖率</td>
+<td>降级为同步阻塞传输，牺牲吞吐换稳定</td>
+</tr>
+<tr>
+<td>多级存储</td>
+<td>热层（GPU 显存）容量能否覆盖活跃请求集</td>
+<td>缩短最大序列长度或增大显存配比</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>结论与局限</h2>
+<p><strong>核心结论：</strong></p>
+<ol>
+<li><strong>KV Cache 正在从推理引擎的内部组件演变为独立的数据基础设施层。</strong> 这一转变使得计算与数据可以按各自最优策略独立扩展。</li>
+<li><strong>调度与执行的解耦是全部后续优化的架构前提。</strong> vLLM v1 通过六个注入式接口将"何时加载"与"如何搬运"彻底分离，为异步传输和外部存储接入提供了稳定的抽象。</li>
+<li><strong>三种异步传输范式逐级递进地解决了 GPU 空转问题。</strong> 逐层传输零侵入但受限于单层带宽；请求级异步大幅提升利用率但占用显存；L2 预取通过 CPU 缓冲彻底解耦显存分配与慢速传输。</li>
+<li><strong>LMCache 的 MP 守护进程模式消除了 GIL 竞争并获得节点级全局视野。</strong> CudaIPC 使得跨 vLLM 实例的零拷贝共享成为可能。</li>
+<li><strong>Mooncake 通过 GPUDirect RDMA 将跨节点 KV Cache 传输压缩为一次硬件级端到端搬运。</strong> PD 分离架构中 KV Cache 传输的性能上限仅取决于 RDMA 网络带宽。</li>
+<li><strong>极致的传输性能高度依赖底层硬件拓扑的支持。</strong> GPUDirect RDMA 要求网卡与 GPU 均具备对应能力，非理想网络环境下性能可能显著退化。</li>
+<li><strong>异步机制在提升 GPU 利用率的同时，带来了调度器复杂度的非线性增长。</strong> 传输状态追踪、请求级缓存管理和跨层可观测性共同构成了工程上的主要维护成本。</li>
+</ol>
+<p><strong>明确局限：</strong></p>
+<ul>
+<li>演讲材料未提供各异步范式的定量性能对比数据，本文分析基于架构层面的定性推演。</li>
+<li>LMCache 和 Mooncake 的零拷贝传输效果严格受限于底层硬件配置（如 RDMA 网卡型号、PCIe 拓扑），在非理想环境下可能无法达到预期性能。</li>
+<li>请求级异步在慢速网络下会导致 GPU 显存长时间被占用，实际部署时需结合系统压力谨慎评估。</li>
+<li>在网络条件或运维能力不达标的环境下，保守的同机共置部署仍可能是更务实的选择。</li>
+</ul>
+  </article>
+</main>
+<script>
+  const status = document.getElementById("status");
+  // Use the browser's native selection copy, the same path as copying from the
+  // website by hand; Zhihu only re-hosts pasted images reliably from that payload.
+  function copyNode(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    status.textContent = ok ? "已复制，去知乎编辑器粘贴即可。" : "已选中内容，请按 Ctrl/⌘+C 复制。";
+    if (ok) selection.removeAllRanges();
+  }
+  document.getElementById("copy-body").onclick = () => copyNode(document.getElementById("article"));
+  document.getElementById("copy-title").onclick = () => copyNode(document.getElementById("title"));
+</script>
+</body>
+</html>

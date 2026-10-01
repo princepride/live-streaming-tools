@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vLLM-Omni 核心解析：Diffusion 异步批处理与 PiD 架构实践</title>
+<style>
+  :root { --ink:#1a1a1a; --muted:#8590a6; --line:#ebebeb; --accent:#056de8; --code:#f6f6f6; --bg:#fff; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .bar { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+          padding:10px 16px; background:#f8f9fb; border-bottom:1px solid var(--line); font-size:14px; }
+  .bar button { padding:6px 14px; border:1px solid var(--accent); border-radius:4px; cursor:pointer;
+                 background:var(--accent); color:#fff; font-size:14px; }
+  .bar button.ghost { background:#fff; color:var(--accent); }
+  .bar .hint { color:var(--muted); }
+  main { max-width:690px; margin:0 auto; padding:24px 16px 80px; }
+  h1.title { font-size:26px; line-height:1.4; margin:8px 0 20px; }
+  #article h2 { font-size:22px; margin:32px 0 12px; }
+  #article h3 { font-size:19px; margin:24px 0 10px; }
+  #article img { max-width:100%; }
+  #article img[eeimg] { max-width:none; vertical-align:middle; }
+  #article p.pic { margin:16px 0 4px; text-align:center; }
+  #article .formula { text-align:center; overflow-x:auto; }
+  #article blockquote { margin:16px 0; padding:0 14px; border-left:3px solid #d3d3d3; color:#646464; }
+  #article pre { background:var(--code); padding:12px 14px; overflow-x:auto; border-radius:4px; font-size:14px; }
+  #article code { background:var(--code); padding:1px 4px; border-radius:3px; font-size:0.92em; }
+  #article pre code { background:none; padding:0; }
+  #article table { border-collapse:collapse; margin:16px 0; font-size:14px; display:block; overflow-x:auto; }
+  #article th, #article td { border:1px solid var(--line); padding:6px 10px; vertical-align:top; }
+  #article th { background:#f6f6f6; }
+  #article hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="copy-body">复制正文</button>
+  <button id="copy-title" class="ghost">复制标题</button>
+  <span class="hint" id="status">图片使用 GitHub Pages 外链，公式为知乎公式图片。在知乎编辑器正文处粘贴（Ctrl/⌘+V）。</span>
+</div>
+<main>
+  <h1 class="title" id="title">vLLM-Omni 核心解析：Diffusion 异步批处理与 PiD 架构实践</h1>
+  <article id="article">
+<p><strong>原视频</strong>：<a href="https://www.bilibili.com/video/BV189816ZE9C">vLLM 小课堂（十四）：Diffusion Continuous Batching 详解</a> · <strong>配套资料</strong>：<a href="https://drive.google.com/drive/folders/1C6PPfNhHgt0ehIO4v5AW7G2OAeRtYRoK">BilibiliShare 课件</a></p>
+<p>扩散模型的在线推理有一对难以调和的矛盾：<strong>小分辨率下 GPU 算力吃不饱，大分辨率下显存和延迟又居高不下</strong>。vLLM-Omni 给出的方案是，先把调度粒度从"整条请求"拆细到"单个降噪步"，在 step 间隙实现动态组 batch 来提升小 shape 吞吐；再引入 PiD（Pixel Diffusion）替代 VAE decode，让主模型始终在小分辨率上推理，由轻量超分模块放大到目标尺寸。本文沿着这条因果链，从阻塞问题出发，逐层拆解异步调度、动态组 batch、异构分辨率处理、性能边界以及 PiD 的机制与实测收益。</p>
+<p><strong>适读人群</strong>：具备深度学习推理基础，关注模型部署与性能优化的 AI 工程师和后端开发者。</p>
+<p><strong>前置知识</strong>：了解 Diffusion 模型降噪流程的基本概念（step、latent、噪声调度），熟悉 batch 推理的一般原理，对 attention 机制有初步认识。</p>
+<p><strong>阅读目标</strong>：</p>
+<ol>
+<li>理解传统 Diffusion 同步推理导致的算力闲置根因。</li>
+<li>掌握 vLLM-Omni 基于 step 粒度的异步请求下发与动态组 batch 机制。</li>
+<li>了解异构分辨率组 batch 的切分与注意力隔离策略。</li>
+<li>认识 PiD 如何通过提前结束与上采样，兼顾小分辨率高吞吐与高清图像生成。</li>
+</ol>
+<hr>
+<h2>1 同步调度的工程矛盾：为什么 Diffusion 需要异步化？</h2>
+<p><strong>本节核心问题：</strong> 传统的 Diffusion 推理接口为何会导致 GPU 算力闲置？</p>
+<h3>请求粒度的同步执行为何成为瓶颈</h3>
+<p>在 vLLM-Omni 的多阶段流水线中，上游 AR（自回归）阶段完成后，生成请求进入 Diffusion 阶段。改造前，Diffusion Engine 以 <strong>请求粒度</strong> 同步地将任务下发至后端 Worker——即一条请求必须走完全部降噪 step（扩散模型生成过程中的单次去噪计算）才会释放执行通道，后续请求只能排队等待。</p>
+<p>这意味着：即使 GPU 在单条请求的计算中存在并行余量，新到达的请求也无法被纳入当前计算。<strong>组 batch</strong>（Dynamic Batching，将多条独立推理请求合并为一个批次并行计算，以提升 GPU 利用率）的前提是"凑齐一批兼容请求"，但在同步模式下这一前提根本无法成立。</p>
+<h3>阻塞如何吞噬组 batch 的机会</h3>
+<p>下图展示了异步化改造的动机与整体架构。重点关注左上角 <strong>Motivation</strong> 区域所描述的因果链：</p>
+<p><img alt="Diffusion 异步组 batch 架构：从异步请求到达、调度、执行到乱序返回的完整流程" src="https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/assets/slides/slide-05.png">
+<em>图注：左侧为请求随时间异步到达的示意；中部展示 Engine → Scheduler → Worker 三层职责；右侧说明结果按各自完成时间乱序返回。来源：演讲 PPT 第 5 页。</em></p>
+<p>图中 Motivation 部分给出了三段因果：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">序号</th>
+<th>环节</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">①</td>
+<td>不同生成请求在不同时刻到达</td>
+<td>真实场景中请求天然异步，到达间隔不可预测</td>
+</tr>
+<tr>
+<td style="text-align: center;">②</td>
+<td>原有 <code>execute model</code> 接口阻塞新请求加入</td>
+<td>执行粒度是整条请求的所有 step，通道被独占</td>
+</tr>
+<tr>
+<td style="text-align: center;">③</td>
+<td>错过组 batch 时机 → 低利用率</td>
+<td>无法将并发请求拼入同一批次，GPU 并行度浪费</td>
+</tr>
+</tbody>
+</table>
+<p>图中右侧的 "Out-of-order return" 暗示了改造方向：如果能让请求独立完成、独立返回，就能打破"一条请求锁死整个通道"的限制。</p>
+<h3>一个最小时间线：阻塞到底浪费了什么</h3>
+<p>假设四条请求 A–D 分别在 t₀–t₃ 到达，每条需要执行多个降噪 step。同步模式下：</p>
+<pre><code>t₀ ──── A 执行全部 step ────── A 完成
+                                t_done_A ── B 执行全部 step ── B 完成
+                                                                ...
+</code></pre>
+<p>请求 B 在 t₁ 就已到达，却必须等到 A 完成后才能开始。每条请求独占 GPU，batch size 始终为 1，矩阵运算单元大量空闲。</p>
+<p>若能组 batch：A、B、D 在 Scheduler 判定为"同 shape、同 CFG（Classifier-Free Guidance，无分类器引导缩放系数）配置"后，可被合并为一个 batch 并行执行，有效吞吐随之增长。</p>
+<h3>小结</h3>
+<p>同步执行模式的本质问题是 <strong>执行粒度与调度粒度错配</strong>：调度以"整条请求"为单位，而 Diffusion 生成天然由多个 step 组成，每个 step 之间存在天然的调度窗口。将粒度从请求级拆解到 step 级，就为动态组 batch 打开了空间。这正是下一节要展开的核心设计。</p>
+<hr>
+<h2>2 核心设计：Step 粒度的异步请求下发</h2>
+<p><strong>本节核心问题：</strong> 如何将调度粒度从请求级打散到 step 级，让系统在任意两个 step 之间都能插入、终止或返回请求？</p>
+<h3>改造前的瓶颈</h3>
+<p>改造前，上层 stage（由 FastAPI 服务拉起的请求解析与分发层）将请求同步交给 Diffusion stage 处理。整条链路串行阻塞：</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>改造前行为</th>
+<th>直接后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>下发粒度</td>
+<td>以 request 为单位同步等待</td>
+<td>引擎同一时刻只持有一条请求</td>
+</tr>
+<tr>
+<td>批处理</td>
+<td>无法实现</td>
+<td>GPU 利用率低</td>
+</tr>
+<tr>
+<td>中断响应</td>
+<td>必须等全部 step 完成才能返回</td>
+<td>无法提前终止长耗时请求</td>
+</tr>
+</tbody>
+</table>
+<h3>整体交互流程</h3>
+<p>下图是异步下发的时序示意，展示了客户端线程、<code>DiffusionEngine</code>、<code>StepScheduler</code>、Worker 四个角色之间的消息流转：</p>
+<p><img alt="异步请求下发时序图：客户端线程将请求送入 DiffusionEngine，由 StepScheduler 调度后交给 Worker 逐 step 执行并流式返回结果" src="https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/assets/slides/slide-03.png">
+<em>图注：异步请求下发序列图，展示从请求入队、调度、逐 step 执行到结果流式回传的完整路径。来源：演讲 PPT 第 3 页。</em></p>
+<p>图中自左向右的四条生命线分别对应：上层 stage 的客户端线程（生产者）、<code>DiffusionEngine._busy_loop</code>（调度心跳）、<code>StepScheduler</code>（队列管理）、以及 Executor/Worker + <code>DiffusionModelRunner</code>（消费者）。消息箭头形成了"入队 → 循环调度 → 逐步执行 → 流式回传"的闭环。</p>
+<h3>三段因果链</h3>
+<p><strong>① 生产者：入队即返回</strong></p>
+<p>上层 stage 线程拿到一条 Diffusion 请求后，做两件事便结束自身职责：</p>
+<ol>
+<li>调用 <code>_add_prepared_request</code> 将请求放入 <code>StepScheduler</code> 的 waiting 队列，并唤醒后台循环；</li>
+<li>调用 <code>get_output_stream</code> 获取一个异步输出流句柄，用于后续接收结果。</li>
+</ol>
+<p>与改造前的根本差异在于：生产者只负责"放入"和"订阅流"，不再阻塞等待整条请求跑完所有降噪步。首条请求到达时会额外触发 <code>_check_and_start_background_loop</code>，完成队列读写所需的线程锁及 asyncio 异步变量的初始化。</p>
+<p><strong>② 调度中枢：<code>_busy_loop</code></strong></p>
+<p><code>DiffusionEngine</code> 内部维护一个名为 <code>_busy_loop</code> 的后台线程，是整套异步机制的心跳。其行为可简化为一个无限循环：</p>
+<ol>
+<li>从 <code>StepScheduler</code> 读取当前可调度的请求（<code>schedule</code> / <code>deschedule</code>）；</li>
+<li>若存在可调度请求，将它们打包送入后端 Worker 执行<strong>一个</strong> step；</li>
+<li>step 完成后，将中间结果或最终输出写回各请求对应的输出流；</li>
+<li>回到步骤 1，开启下一轮循环。</li>
+</ol>
+<p>若当前无可调度请求，线程通过 wait/唤醒机制挂起，避免空转消耗 CPU，直到新请求入队时被显式通知。</p>
+<p><code>StepScheduler</code> 自身维护 <strong>running</strong> 和 <strong>waiting</strong> 两类队列。每轮循环中，调度器检查 waiting 队列中哪些请求已满足执行条件，将其提升至 running 队列，与现有 running 请求共同构成本轮 step 的批次。</p>
+<p><strong>③ 消费者：逐 step 执行与回传</strong></p>
+<p>Worker 接收到一批请求后，在 tensor 维度将各请求的 <strong>latent</strong>（潜在空间特征，Diffusion 模型降噪过程中处理的中间数据形态）拼接起来，交由 <code>DiffusionModelRunner</code> 完成一次降噪计算。计算结果按请求拆分后，经输出流回传给各自的客户端线程。</p>
+<p>每完成一个 step，控制权即回到 <code>_busy_loop</code>。这为三种操作打开了窗口：</p>
+<ul>
+<li><strong>插入新请求</strong>：新到达的请求在下一轮循环被拉入 running 队列，随即参与组 batch。</li>
+<li><strong>终止请求</strong>：上层发出中断信号后，<code>_busy_loop</code> 在下一轮循环中将目标请求剔除。</li>
+<li><strong>返回中间结果</strong>：已走完全部 step 的请求输出最终图像；仍在进行中的请求可输出当前 step 的中间 latent。</li>
+</ul>
+<h3>最小状态演进示例</h3>
+<p>假设系统初始为空，请求 A 和 B 先后到达：</p>
+<table>
+<thead>
+<tr>
+<th>时刻</th>
+<th>事件</th>
+<th>StepScheduler 状态</th>
+<th>Worker 执行内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>t₀</td>
+<td>A 入队，唤醒 busy_loop</td>
+<td>waiting→running: {A}</td>
+<td>—</td>
+</tr>
+<tr>
+<td>t₁</td>
+<td>A 的 step 1 完成</td>
+<td>running: {A}</td>
+<td>A step 1</td>
+</tr>
+<tr>
+<td>t₂</td>
+<td>B 入队（step 间隙）</td>
+<td>waiting→running: {A, B}</td>
+<td>—</td>
+</tr>
+<tr>
+<td>t₃</td>
+<td>A step 2 + B step 1 组 batch 执行</td>
+<td>running: {A, B}</td>
+<td>{A, B} 批量执行</td>
+</tr>
+<tr>
+<td>t₄</td>
+<td>A 全部 step 结束，输出结果</td>
+<td>running: {B}</td>
+<td>B 继续 step 2…</td>
+</tr>
+</tbody>
+</table>
+<p>B 不需要等 A 走完所有降噪步才能加入，它在 t₂ 的 step 间隙被调度器拉入 running 队列，从 t₃ 起与 A 共享同一次 GPU 计算。</p>
+<h3>边界条件</h3>
+<ol>
+<li><strong>模型越小、step 越快，调度占比越高。</strong> 当单 step 的 GPU 计算本身很短时，毫秒级调度开销不可忽视。</li>
+<li><strong>中断响应粒度是"下一个 step 开始前"。</strong> 若单 step 耗时较长，中断的实际延迟等于当前 step 剩余执行时间。</li>
+<li>演讲材料未给出 <code>StepScheduler</code> 内部的具体优先级规则或单批次最大请求数上限。</li>
+</ol>
+<p><strong>小结</strong>：将调度粒度从 request 下沉到 step，是后续一切批处理优化的基础设施。它赋予 <code>DiffusionEngine</code> 在每个降噪步间隙动态增减请求的能力，同时天然支持中断与中间结果流式返回。有了这一灵活性，紧接着要回答的是：在极短的 step 间隙内组 batch，CPU 开销是否会成为新瓶颈？</p>
+<hr>
+<h2>3 数据结构与执行：极低开销的动态组 Batch</h2>
+<p><strong>本节核心问题：</strong> 每两个 step 之间都要在 CPU 侧完成请求筛选、padding 计算和 mask 构建——这些操作是否会成为新的性能瓶颈？</p>
+<p>答案是否定的。根据演讲中的 profiling 数据，组 batch 的核心函数 <code>make_batch</code> 耗时 <strong>&lt; 1 ms</strong>，而 GPU 侧 <code>execute_stepwise</code> 执行单个降噪步约 <strong>1 000–1 200 ms</strong>。两者相差三个数量级，CPU 调度开销完全被 GPU 计算时间掩盖。</p>
+<h3>不同进度的请求为什么可以放进同一个 batch</h3>
+<p>组 batch 的前提是合并后不改变各请求的计算语义。扩散模型有三个维度可能不同：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>是否影响 forward</th>
+<th>处理策略</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>降噪进度</strong>（timestep）</td>
+<td>不影响——timestep 是请求级条件输入</td>
+<td>每个请求独立记录当前 step</td>
+</tr>
+<tr>
+<td><strong>文本长度</strong>（text token 数）</td>
+<td>影响张量宽度</td>
+<td>pad 到当前 batch 内最大长度 <img src="https://www.zhihu.com/equation?tex=T_%7B%5Cmax%7D" alt="T_{\max}" class="ee_img tr_noresize" eeimg="1">，配合 attention mask</td>
+</tr>
+<tr>
+<td><strong>图像尺寸</strong>（latent 分辨率）</td>
+<td>影响张量高度</td>
+<td>当前方案要求同 shape 才可合并</td>
+</tr>
+</tbody>
+</table>
+<p>三条规则合在一起，就是调度器挑选请求时的兼容性判据：<strong>相同 shape、相同 CFG 配置</strong>的请求才会被选入同一批次。</p>
+<h3>关键数据结构：RequestState 与 InputBatch</h3>
+<p>下图展示了两个核心结构如何协作完成从请求状态管理到统一张量构建的全过程：</p>
+<p><img alt="vLLM-Omni 组 batch 关键数据结构示意，展示 RequestState 保存请求级状态以及 padding/mask 构建 InputBatch 的流程" src="https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/assets/slides/slide-06.png">
+<em>图注：组 batch 数据结构与张量构建流程。来源：演讲 PPT 第 6 页。</em></p>
+<p><strong>RequestState——请求级状态容器</strong></p>
+<p>每个进入系统的生成请求都对应一个 <code>RequestState</code> 实例，至少保存以下信息：</p>
+<ul>
+<li><strong>当前 timestep</strong>：已完成的降噪步数，决定下一步使用哪个时间步嵌入。</li>
+<li><strong>latent 张量</strong>：当前步的中间降噪结果，形状与目标图像分辨率对应。</li>
+<li><strong>文本 embedding</strong>：经 text encoder 后的条件向量，多 step 过程中保持不变，避免重复编码。</li>
+<li><strong>CFG 参数</strong>：Classifier-Free Guidance 的缩放系数等配置。</li>
+</ul>
+<p><code>RequestState</code> 使请求的生命周期（waiting → scheduled → running → finished）与 GPU 的单步执行完全解耦。调度器只需读取各请求的状态字段，即可判断哪些请求具备合并条件。</p>
+<p><strong>InputBatch——组批元数据与统一张量</strong></p>
+<p>调度器选定一组兼容请求后，Worker 中的 batch builder 将它们拼装为 <code>InputBatch</code>，分三步完成：</p>
+<ol>
+<li><strong>文本 padding</strong>：假设请求 A 的文本长度为 <img src="https://www.zhihu.com/equation?tex=s_A" alt="s_A" class="ee_img tr_noresize" eeimg="1">，请求 B 为 <img src="https://www.zhihu.com/equation?tex=s_B" alt="s_B" class="ee_img tr_noresize" eeimg="1">，令 <img src="https://www.zhihu.com/equation?tex=T_%7B%5Cmax%7D%20%3D%20%5Cmax%28s_A%2C%20s_B%29" alt="T_{\max} = \max(s_A, s_B)" class="ee_img tr_noresize" eeimg="1">。较短的序列尾部填充零向量，使所有文本张量对齐到 <img src="https://www.zhihu.com/equation?tex=%5BB%2C%5C%3B%20T_%7B%5Cmax%7D%2C%5C%3B%20H%5D" alt="[B,\; T_{\max},\; H]" class="ee_img tr_noresize" eeimg="1">。</li>
+<li><strong>Mask 构建</strong>：生成 <code>mask_T</code>（文本有效位置）和 <code>mask_Img</code>（图像 token 有效位置）两组掩码，无效位置在 attention 计算中被屏蔽。</li>
+<li><strong>张量拼接</strong>：文本部分和图像 latent 部分沿序列维度拼接，最终输入形状为 <img src="https://www.zhihu.com/equation?tex=%5BB%2C%5C%3B%20T_%7B%5Cmax%7D%20%2B%20L_%7B%5Ctext%7Bimg%7D%7D%2C%5C%3B%20H%5D" alt="[B,\; T_{\max} + L_{\text{img}},\; H]" class="ee_img tr_noresize" eeimg="1">。</li>
+</ol>
+<p>拼装完成后，GPU 只需执行一次 DiT（Diffusion Transformer）forward 即可同时推进 batch 内所有请求各一步。</p>
+<h3>最小状态演进示例</h3>
+<table>
+<thead>
+<tr>
+<th>请求</th>
+<th>目标分辨率</th>
+<th>文本长度</th>
+<th>当前 step</th>
+<th>CFG</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>512×512</td>
+<td>48</td>
+<td>3</td>
+<td>7.5</td>
+</tr>
+<tr>
+<td>B</td>
+<td>512×512</td>
+<td>32</td>
+<td>1</td>
+<td>7.5</td>
+</tr>
+<tr>
+<td>C</td>
+<td>1024×1024</td>
+<td>60</td>
+<td>0</td>
+<td>7.5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>调度器判定</strong>：A 与 B 分辨率相同、CFG 相同，可合并；C 分辨率不同，需单独执行或等待同分辨率请求。</p>
+<p><strong>InputBatch 构建（A + B）</strong>：<img src="https://www.zhihu.com/equation?tex=T_%7B%5Cmax%7D%20%3D%2048" alt="T_{\max} = 48" class="ee_img tr_noresize" eeimg="1">，B 的文本 padding 16 个零向量；latent 形状一致，无需额外处理；timestep 向量为 <img src="https://www.zhihu.com/equation?tex=%5Bt_A%5E%7B%283%29%7D%2C%5C%3B%20t_B%5E%7B%281%29%7D%5D" alt="[t_A^{(3)},\; t_B^{(1)}]" class="ee_img tr_noresize" eeimg="1">，各自对应不同降噪阶段的噪声调度值。</p>
+<p>GPU 执行一步后，A 进入 step 4，B 进入 step 2。若 A 的总步数为 4，则 A 标记为 finished，其 Future 立即 resolve 并返回结果——返回顺序与到达顺序无关。</p>
+<h3>边界条件与当前局限</h3>
+<ol>
+<li><strong>同 shape 约束</strong>：不同分辨率的请求无法合并。真实业务中用户请求的目标尺寸往往各异，这会显著限制有效 batch size。</li>
+<li><strong>CFG 一致性要求</strong>：不同 guidance scale 的请求也不能合并，进一步缩小可组 batch 的请求池。</li>
+</ol>
+<p><strong>小结</strong>：组 batch 的 CPU 调度开销在当前实现中可以忽略不计，真正制约动态批处理效果的因素是请求之间的形状与配置异构性。当同时存在多种分辨率的请求时，能否将它们放进同一个 batch？</p>
+<hr>
+<h2>4 异构分辨率的组 Batch 策略</h2>
+<p><strong>本节核心问题：</strong> 当同时到达的请求分辨率各不相同——例如 1024×1024、768×768 和 512×1024——张量形状无法对齐，能否仍然放进同一个 batch 并行执行？</p>
+<h3>从同构到异构：新增的工程矛盾</h3>
+<p>同构场景下所有 latent 具有相同空间维度，直接沿 batch 维拼接即可。一旦分辨率不同，核心矛盾变为：<strong>latent 张量在空间维上长度不等，无法构成规整的 <code>[B, S, H]</code> 张量</strong>。朴素的 padding 对齐会浪费大量计算与显存，串行执行则 GPU 利用率低下。</p>
+<h3>等长 Chunk 切分与重组</h3>
+<p>关键思路是：<strong>不在原始分辨率上拼接，而是先将每个请求的图像 latent 切分为等长的 chunk，再把所有 chunk 组成 batch 执行。</strong></p>
+<ol>
+<li><strong>计算切分粒度</strong>——对所有请求的图像高度和宽度求最大公约数（GCD），确定 chunk 的空间尺寸。例如三个请求分辨率为 1024×1024、768×768、512×1024，可得 256×256 的 chunk。</li>
+<li><strong>切分</strong>——每个请求的 latent 按 chunk 尺寸切分。1024×1024 产生 16 个 chunk，768×768 产生 9 个。</li>
+<li><strong>拼接</strong>——所有 chunk 视作独立的"小图像"token 序列，沿 batch 维拼成一个大张量统一送入 DiT block。</li>
+<li><strong>合并</strong>——降噪完成后，将属于同一请求的 chunk 按原始位置重新拼合，恢复完整图像。</li>
+</ol>
+<h3>为什么只有 Self-Attention 需要特殊处理</h3>
+<p>将 DiT block 内的算子按"是否需要跨 chunk 上下文"分为两类：</p>
+<ul>
+<li><strong>无跨 chunk 依赖</strong>：Linear 层、LayerNorm / RMSNorm、逐元素操作——它们对每个 token 独立运算，切分不影响结果。</li>
+<li><strong>有跨 chunk 依赖</strong>：<strong>Self-Attention 是唯一例外</strong>。其 Q、K、V 交互范围覆盖同一图像内的所有空间位置；只在 chunk 内部做 attention 等价于施加局部窗口，会导致精度损失。</li>
+</ul>
+<p>因此，组 batch 后仅需在 self-attention 这一步做特殊处理，其余算子直接以 chunk 粒度的大 batch 执行。</p>
+<h3>Self-Attention 的两种处理方式</h3>
+<p><strong>方式一：Attention 前恢复、Attention 后重切（Recover-Scatter）。</strong> 进入 self-attention 之前，将同一请求的所有 chunk 拼回原始分辨率形状；分辨率相同的请求可合并成一个小 batch 一起计算；完成后再拆回 chunk 形态继续后续层。</p>
+<p><strong>方式二：Varlen Attention Mask。</strong> <strong>varlen attention</strong>（Variable-Length Attention，变长序列注意力）允许通过传入 variance mask 精确指定每个 Q token 应与哪些 K/V token 交互，无需物理 recover/scatter，减少数据搬运开销。演讲者指出此功能在其早期工作时尚不可用，属于更新的优化路径。</p>
+<h3>收益来源</h3>
+<p>组 batch 的收益<strong>主要来自 attention 以外的所有算子</strong>。Linear、Norm、element-wise 操作在 chunk 粒度下组成更大 batch，GPU 计算单元更充分利用。Attention 阶段通过上述两种方式保持精度，不额外引入收益但也不引入损失。</p>
+<h3>边界条件</h3>
+<ul>
+<li><strong>GCD 过小时</strong>：分辨率差异极端会导致 chunk 数量激增、attention 恢复开销增大，收益可能被抵消。</li>
+<li><strong>VAE Decode 仍串行</strong>：VAE decode 属于 memory-bound 操作，组 batch 收益有限，当前仍为串行执行。</li>
+</ul>
+<p><strong>小结</strong>：通过 GCD 驱动的等长 chunk 切分，异构分辨率请求可以在除 self-attention 外的全部算子上共享 batch 执行，在精度无损的前提下提升 GPU 利用率。机制设计完成，接下来需要通过实测数据验证其在不同分辨率下的真实收益。</p>
+<hr>
+<h2>5 性能与瓶颈：组 Batch 的收益边界在哪里？</h2>
+<p><strong>本节核心问题：</strong> 开启组 batch 后，吞吐量和延迟在所有分辨率下都能获得显著提升吗？</p>
+<p>答案是否定的。收益大小取决于单张图片生成时 GPU 算力的饱和程度：shape 越大、算力越满，组 batch 能释放的空间越小。以下数据均基于 Qwen-Image 模型在昇腾 A3 单卡上的实测。</p>
+<h3>1024×1024：算力已饱和，收益近乎为零</h3>
+<p>在 1024×1024 分辨率下，未开启组 batch 时，吞吐维持在约 <strong>0.0127 req/s</strong>。开启后微升至 <strong>0.0131 req/s</strong>，提升不到 4%，基本落入测量误差范围。</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>未开启</th>
+<th>开启</th>
+<th>变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>吞吐（req/s）</td>
+<td>≈ 0.0127</td>
+<td>≈ 0.0131</td>
+<td>≈ +3%</td>
+</tr>
+<tr>
+<td>延迟增长趋势</td>
+<td>线性</td>
+<td>近似线性（斜率略降）</td>
+<td>极小</td>
+</tr>
+</tbody>
+</table>
+<p>原因直观：1024×1024 下每一步的矩阵运算量足以把计算单元"喂饱"，瓶颈在算力本身（compute bound）而非调度间隙。</p>
+<h3>512×512：小 shape 释放显著红利</h3>
+<p>分辨率降到 512×512 后，情况发生质变。Batch Size = 8 时：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>未开启</th>
+<th>开启（BS=8）</th>
+<th>变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>吞吐（req/s）</td>
+<td>≈ 0.1115</td>
+<td>≈ 0.20</td>
+<td>≈ +45%</td>
+</tr>
+<tr>
+<td>E2E 延迟（s）</td>
+<td>72</td>
+<td>38</td>
+<td>−33 s</td>
+</tr>
+</tbody>
+</table>
+<p>小 shape 下每张图片的单步计算量不足以占满硬件，留出大量空闲周期。组 batch 将多个请求的 latent 拼接后一次送入计算，正好填补了这些空闲。</p>
+<h3>收益拆解：33 秒里的 11 秒来自哪里？</h3>
+<p>通过对 Top-3 耗时算子（<code>aclnnAddmm</code>、<code>aclnnMul</code>、<code>aclnnFA</code>）的 profiling，可将收益拆为两部分：</p>
+<ol>
+<li><strong>算子下发开销摊销</strong>：未开启组 batch 时，每张图片的每个 step 都需要 CPU 独立向加速卡下发一整套算子调用。开启后，多个请求共享同一轮下发，调用次数与单请求时基本持平。这一项直接节省 <strong>11 秒</strong>，占总收益的 <strong>34%</strong>。</li>
+<li><strong>计算利用率提升</strong>：剩余约 22 秒（66%）来自硬件计算单元的更充分利用。</li>
+</ol>
+<p>下图的三组子图分别对应延迟与吞吐、算子下发耗时、NPU 利用率：</p>
+<p><img alt="Qwen-Image A3 单卡 512×512 下的性能分析：延迟与吞吐、算子下发耗时、NPU 利用率三组对比" src="https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/assets/slides/slide-09.png">
+<em>图注：左图为开启与未开启组 batch 在不同并发度下的 E2E 延迟与吞吐对比；中图为 Top-3 算子下发耗时随并发增长的变化；右图为 NPU 计算利用率柱状图。来源：演讲 PPT 第 9 页。</em></p>
+<p>图中几个关键信号：</p>
+<ul>
+<li><strong>左图</strong>：未开启组 batch 的延迟曲线呈严格线性上升，吞吐横线不动；开启后延迟斜率明显更低，吞吐折线稳步爬升。</li>
+<li><strong>中图</strong>：未开启时的下发耗时随并发线性膨胀，开启后几乎保持水平——印证了算子调用次数不随 batch size 增加。</li>
+<li><strong>右图</strong>：<code>aclnnAddmm</code> 与 <code>aclnnMul</code> 在组 batch 模式下随并发上升提升显著，但 <code>aclnnFA</code>（FlashAttention 算子）在高并发时出现轻微下降，暗示注意力计算在该硬件上存在额外调度瓶颈。</li>
+</ul>
+<h3>并发度 &gt; 5 后的平台期</h3>
+<p>无论吞吐曲线还是 NPU 利用率，<strong>并发度超过 5</strong> 之后增长均趋于平缓。硬件利用率已逼近上限，继续增大 batch size 只增加显存占用而无法换取更多吞吐。实际部署中，batch size 设为 5–8 是一个合理的工作点。</p>
+<h3>小结</h3>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>组 batch 收益</th>
+<th>瓶颈所在</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>大 shape（1024×1024）</td>
+<td>极小（&lt; 4%）</td>
+<td>计算 bound，算力已饱和</td>
+</tr>
+<tr>
+<td>小 shape（512×512），并发 ≤ 5</td>
+<td>显著（吞吐 +45%，延迟 −33 s）</td>
+<td>算子下发 + 算力空闲</td>
+</tr>
+<tr>
+<td>小 shape，并发 &gt; 5</td>
+<td>边际递减，进入平台期</td>
+<td>硬件利用率趋于饱和</td>
+</tr>
+</tbody>
+</table>
+<p>组 batch 的收益本质来源于"填补算力空闲 + 摊销下发开销"，当这两项空间被压缩到极限，收益即触顶。以上数据基于昇腾 A3 单卡测试，不同硬件平台的饱和点可能不同。</p>
+<p>这就引出了一个实际矛盾：小分辨率下组 batch 效果拔群，但用户往往需要高清大图。有没有一种方式，既能在小 latent shape 上高效推理，又能最终输出高分辨率图像？</p>
+<hr>
+<h2>6 机制深化：PiD 提前结束与特征上采样</h2>
+<p><strong>本节核心问题：</strong> 能否在小 latent 上完成主要降噪，再把结果"放大"到高分辨率？</p>
+<p><strong>PiD</strong>（Pixel Diffusion，像素空间扩散）正是为此而设计。它替换传统 VAE decode 阶段，允许在降噪中间步提前结束，并利用小分辨率特征生成高分辨率像素图像。</p>
+<h3>从标准流程到提前结束</h3>
+<p>典型的 Diffusion 图像生成包含三段：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>操作空间</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VAE encode</td>
+<td>像素 → latent</td>
+<td>将输入映射到低维潜在空间</td>
+</tr>
+<tr>
+<td>多步降噪（step 0 … N-1）</td>
+<td>latent</td>
+<td>DiT Block 逐步去噪</td>
+</tr>
+<tr>
+<td>VAE decode</td>
+<td>latent → 像素</td>
+<td>将最终 latent 还原为像素图像</td>
+</tr>
+</tbody>
+</table>
+<p>PiD 的切入点在第三段：它<strong>替换</strong> VAE decode，并且不要求降噪跑满全部 N 步——可以在 <strong>N-2、N-4</strong> 等中间步提前结束，把此时的 latent 交给 PiD 处理。主模型推理步数随之缩减，降噪阶段计算量相应降低。</p>
+<h3>PiD 内部结构：三路输入、一路高清输出</h3>
+<p>下图展示了 PiD 模块内部的数据流。重点关注三条输入路径如何汇入 PixelDiT 主干：</p>
+<p><img alt="PiD 内部结构图，展示文本 Embedding、latent 条件适配器和 PixelDiT 主干三路输入的数据流" src="https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/assets/slides/slide-11.png">
+<em>图注：PiD 模块结构及数据流。来源：演讲 PPT 第 11 页。</em></p>
+<p>图中三条输入路径与一个主干网络：</p>
+<ol>
+<li>
+<p><strong>latent 输入（左侧）</strong>：来自主模型降噪过程的中间 latent。先经过<strong>条件适配器</strong>（latent condition adapter），内部由 Resize → Conv3×3 → ResBlock → Linear 组成，将主模型的 latent 表征转换为 PixelDiT 主干能识别的特征格式。条件适配器是 PiD 中唯一与主模型强耦合的部分——更换主模型需重新训练适配器，而主干可以复用。</p>
+</li>
+<li>
+<p><strong>文本 Embedding 输入（上方）</strong>：使用冻结的 Gemma-2-2B 模型对文本 prompt 编码，产生 text tokens。文本信息的作用是控制上采样过程中的细节重绘——小分辨率 latent 本身不携带高频细节，放大后的纹理、边缘需要文本语义引导生成。</p>
+</li>
+<li>
+<p><strong>目标分辨率噪声图像（右侧）</strong>：PiD 自身准备一张与目标输出尺寸一致的纯噪声图像。例如主模型在 512×512 下降噪，PiD 执行 4× 上采样时噪声图像为 2048×2048。</p>
+</li>
+</ol>
+<p>三路信息汇入 <strong>PixelDiT 主干</strong>（约 1.3B 参数），通过交叉注意力（cross-attention）在目标分辨率的噪声图像上进行降噪，直接输出高分辨率像素图像。PiD 并非简单插值，而是一个以超分辨率为目标训练的扩散模型，在像素空间（而非 latent 空间）执行降噪，因此完全绕过了 VAE decode。</p>
+<h3>因果链</h3>
+<pre><code>小分辨率 latent（如 512×512）
+  ↓  条件适配器翻译
+PixelDiT 可读取的特征
+  ↓  + 目标分辨率纯噪声（如 2048×2048）+ 文本 tokens
+交叉注意力降噪
+  ↓
+高分辨率像素图像（2048×2048）
+</code></pre>
+<h3>最小例子：512 → 2048 的状态演进</h3>
+<p>以 4× 上采样为例，假设主模型总降噪步数 N = 20：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>发生位置</th>
+<th>分辨率</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>step 0–17</td>
+<td>主模型 DiT</td>
+<td>512×512 latent</td>
+<td>组 batch 运行，享受高吞吐</td>
+</tr>
+<tr>
+<td>step 18（即 N-2）</td>
+<td>主模型 → PiD</td>
+<td>—</td>
+<td>提前结束，latent 传入 PiD</td>
+</tr>
+<tr>
+<td>PiD 多步降噪</td>
+<td>PixelDiT</td>
+<td>2048×2048 像素</td>
+<td>在目标分辨率噪声图上生成高清结果</td>
+</tr>
+</tbody>
+</table>
+<p>主模型少跑了 2 步降噪，且始终在小分辨率上运算；高分辨率的生成开销转移到了体量更小的 PiD 上。</p>
+<h3>模型体量与边界</h3>
+<p>据演讲者口述估计，PiD 的主干加上文本编码器整体<strong>不到 3B</strong> 参数，在显存占用上远小于主模型。PiD 支持 <strong>4× 和 8×</strong> 的上采样倍率。但需要注意：</p>
+<ul>
+<li>PiD 在<strong>像素空间</strong>降噪，目标分辨率很高时其自身显存消耗也会显著增长。</li>
+<li>条件适配器与主模型耦合，更换主模型后需重新训练适配器，PixelDiT 主干保持不变。</li>
+<li>演讲材料未给出更大上采样倍率下的质量与性能数据。</li>
+</ul>
+<p><strong>小结</strong>：PiD 通过将高分辨率生成从 VAE decode 中剥离，交由轻量级像素空间超分扩散模型完成，使主模型得以在小分辨率 latent 上组 batch 运行。接下来看它在实际部署中的资源节省与质量表现。</p>
+<hr>
+<h2>7 性能与局限：PiD 的工程收益与应用场景</h2>
+<p><strong>本节核心问题：</strong> PiD 在 2048 分辨率图像生成任务中究竟能带来多大的资源节省？这些收益是否以牺牲图像质量为代价？</p>
+<h3>2048 分辨率下的实测数据</h3>
+<p>下图包含 PiD 在显存、延迟和质量三个维度的量化对比，用于判断其工程可行性：</p>
+<p><img alt="PiD 在 2048 分辨率下的显存、延迟与质量对比" src="https://princepride.github.io/live-streaming-tools/vllm_omni_diffusion_continuous_batching/final/assets/slides/slide-12.png">
+<em>图注：PiD 效果展示——显存占用、延迟和图像质量的量化对比。来源：演讲 PPT 第 12 页。</em></p>
+<p><strong>显存占用</strong></p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>显存 (GB)</th>
+<th>相对 VAE decode 节省</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VAE decode</td>
+<td>16.84</td>
+<td>—</td>
+</tr>
+<tr>
+<td>PiD</td>
+<td>11.53</td>
+<td>≈ 5.3 GB（约 31.5%）</td>
+</tr>
+</tbody>
+</table>
+<p>PiD 将实际降噪运行在 512 分辨率的输入 latent 上，中间激活显著更小。</p>
+<p><strong>延迟表现</strong></p>
+<ul>
+<li><strong>单步延迟</strong>下降约 <strong>93.9%</strong>——输入只有 512 分辨率，每步计算量约为原始的 1/16（分辨率平方缩减）。</li>
+<li><strong>端到端延迟</strong>降低约 <strong>91.8%</strong>——综合降噪与解码两个阶段的缩减，整体时间不到原来的十分之一。</li>
+</ul>
+<blockquote>
+<p>演讲材料未给出上述测试的具体 GPU 型号与批大小配置，百分比变化比绝对值更具参考意义。</p>
+</blockquote>
+<p><strong>因果链</strong></p>
+<pre><code>输入 latent 分辨率从 2048 降到 512
+  → 中间激活张量大幅缩小
+    → 显存下降 ~5 GB，单步延迟降低 ~94%
+  → 解码由 VAE 卷积换成轻量 Diffusion
+    → 端到端延迟总计降低 ~92%
+</code></pre>
+<h3>图像质量：互有胜负</h3>
+<p>PPT 给出了四个无参考图像质量指标的对比：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>PiD</th>
+<th>VAE</th>
+<th>更优方</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MUSIQ ↑</td>
+<td>68.84</td>
+<td>65.92</td>
+<td>PiD</td>
+<td>多尺度感知质量</td>
+</tr>
+<tr>
+<td>NIQE ↓</td>
+<td>4.14</td>
+<td>5.11</td>
+<td>PiD</td>
+<td>自然场景统计偏差，越低越好</td>
+</tr>
+<tr>
+<td>MANIQA ↑</td>
+<td>0.528</td>
+<td>0.488</td>
+<td>PiD</td>
+<td>多维注意力质量</td>
+</tr>
+<tr>
+<td>Q-Align ↑</td>
+<td>0.866</td>
+<td>0.789</td>
+<td>PiD</td>
+<td>对齐质量评分</td>
+</tr>
+</tbody>
+</table>
+<p>四个量化指标上 PiD 均略优。但演讲者明确指出：<strong>主观视觉感受上两者各有千秋</strong>。例如 VAE 解码在某些场景下纹理质感更细腻，而 PiD 有时色彩更鲜明但细节处偶有拼接痕迹。PiD 因为是"小分辨率生成大分辨率"，本质上会做一定程度的细节重绘，文本 embedding 对新增细节的控制并非完美。PiD 并非无损替代，在对图像保真度有严格要求的场景中需逐案评估。</p>
+<h3>三大适用场景</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>关键约束</th>
+<th>PiD 的作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>边侧受限硬件推理</strong></td>
+<td>单卡仅 24 GB 或 48 GB 显存</td>
+<td>将 2048 分辨率任务的显存降至 ~11.5 GB，使其在消费级 GPU 上可行</td>
+</tr>
+<tr>
+<td><strong>小 shape 组 batch 提升吞吐</strong></td>
+<td>服务端追求吞吐最大化</td>
+<td>用更小的 latent shape 做组 batch，GPU 利用率更高</td>
+</tr>
+<tr>
+<td><strong>超高清图片生成</strong></td>
+<td>需要 4K/8K 输出</td>
+<td>利用 4× 和 8× 上采样特性，在不爆显存的前提下输出超高分辨率</td>
+</tr>
+</tbody>
+</table>
+<p>在边缘推理场景中，传统 VAE decode 的 16.84 GB 峰值显存几乎占满一张 24 GB 显卡的可用空间。切换到 PiD 后释放出的空间足以容纳中等规模的语言-视觉主干。</p>
+<hr>
+<h2>结论与局限</h2>
+<h3>核心结论</h3>
+<ol>
+<li>
+<p><strong>异步请求下发是一切批处理优化的基石。</strong> 将调度粒度从整条请求细化至单个降噪步（step），使 <code>DiffusionEngine</code> 在每个 step 间隙都能动态插入或终止请求，天然支持中断与中间结果流式返回。</p>
+</li>
+<li>
+<p><strong>动态组 batch 的 CPU 开销可以忽略。</strong> <code>make_batch</code> 耗时 &lt; 1 ms，相比 GPU 单步执行的 1 000–1 200 ms，两者差三个数量级。</p>
+</li>
+<li>
+<p><strong>组 batch 在小分辨率下收益显著，在大分辨率下收益受限。</strong> 512×512 下 BS=8 时吞吐提升约 45%、延迟下降 33 秒（其中 34% 归功于算子下发开销摊销）；1024×1024 下提升不到 4%，算力已饱和。</p>
+</li>
+<li>
+<p><strong>异构分辨率可通过 GCD 等长 chunk 切分实现混合 batch。</strong> 仅 self-attention 需要特殊处理（Recover-Scatter 或 varlen mask），其余算子直接以 chunk 粒度并行执行。</p>
+</li>
+<li>
+<p><strong>PiD 以极小的质量波动换取巨大的资源节省。</strong> 在 2048 分辨率下，显存从 16.84 GB 降至 11.53 GB，端到端延迟降低 91.8%，为边缘设备推理和超高清生成提供了低延迟、低显存的新路径。</p>
+</li>
+<li>
+<p><strong>PiD 的核心价值在于解耦主模型推理分辨率与输出分辨率。</strong> 主模型始终在小 latent 上高效组 batch，高分辨率生成交由不到 3B 参数的轻量超分模块完成。</p>
+</li>
+</ol>
+<h3>明确局限</h3>
+<ul>
+<li><strong>大分辨率组 batch 收益有限</strong>：1024×1024 及以上分辨率下算力已饱和，批处理无法释放更多空间。并发度超过 5 后收益进入平台期。</li>
+<li><strong>同 shape + 同 CFG 约束</strong>：不同分辨率和不同 guidance scale 的请求无法合并，限制了实际可组 batch 的请求池规模。</li>
+<li><strong>PiD 图像质量非无损</strong>：量化指标上 PiD 占优，但主观评价因场景而异，细节处偶有拼接痕迹或过曝倾向。</li>
+<li><strong>条件适配器与主模型绑定</strong>：每更换一次主模型，需重新训练 PiD 的条件适配器。</li>
+<li><strong>硬件基准单一</strong>：文中性能数据均基于 Qwen-Image 模型在昇腾 A3 单卡上的测试，不同硬件平台的饱和点与收益曲线可能显著不同。</li>
+<li><strong>PiD 自身的显存扩展问题</strong>：PiD 在像素空间降噪，当目标分辨率极高时，PiD 自身的显存消耗能否通过组 batch 进一步优化，仍有待验证。</li>
+</ul>
+  </article>
+</main>
+<script>
+  const status = document.getElementById("status");
+  // Use the browser's native selection copy, the same path as copying from the
+  // website by hand; Zhihu only re-hosts pasted images reliably from that payload.
+  function copyNode(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    status.textContent = ok ? "已复制，去知乎编辑器粘贴即可。" : "已选中内容，请按 Ctrl/⌘+C 复制。";
+    if (ok) selection.removeAllRanges();
+  }
+  document.getElementById("copy-body").onclick = () => copyNode(document.getElementById("article"));
+  document.getElementById("copy-title").onclick = () => copyNode(document.getElementById("title"));
+</script>
+</body>
+</html>

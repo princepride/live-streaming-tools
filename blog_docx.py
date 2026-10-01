@@ -186,6 +186,11 @@ _MACRO_PATTERN = re.compile(r"\\([A-Za-z]+)")
 _OPEN_BRACE, _CLOSE_BRACE = "\x01", "\x02"
 
 
+def _script_group(group: str) -> str:
+    """Keep parentheses on compound scripts so x_{i+1} does not read as x_i + 1."""
+    return group if re.fullmatch(r"\\?[A-Za-z0-9]+|[A-Za-z0-9,]+", group) else f"({group})"
+
+
 def latex_to_plain(value: str) -> str:
     """Convert the small LaTeX subset emitted by the writing pipeline to readable text."""
     value = value.strip()
@@ -204,8 +209,8 @@ def latex_to_plain(value: str) -> str:
     # Collapse sub/superscripts repeatedly: one pass leaves the outer group of a
     # nested script (p_{\theta_{old}}) intact, which then defeats \frac matching.
     while True:
-        scripted = re.sub(r"_\{([^{}]*)\}", r"_\1", value)
-        scripted = re.sub(r"\^\{([^{}]*)\}", r"^\1", scripted)
+        scripted = re.sub(r"_\{([^{}]*)\}", lambda m: "_" + _script_group(m.group(1)), value)
+        scripted = re.sub(r"\^\{([^{}]*)\}", lambda m: "^" + _script_group(m.group(1)), scripted)
         if scripted == value:
             break
         value = scripted
@@ -213,10 +218,13 @@ def latex_to_plain(value: str) -> str:
     while fraction.search(value):
         value = fraction.sub(lambda match: f"({match.group(1)}) / ({match.group(2)})", value)
     value = value.replace("{,}", ",")
-    value = value.replace(r"\times", " × ").replace(r"\cdot", " · ")
-    value = value.replace(r"\approx", "≈").replace(r"\le", "≤").replace(r"\ge", "≥")
+    # Match whole command names: a bare replace of \le or \right would also hit
+    # \left, \leftarrow and \rightarrow ("≤ft", "arrow").
+    for command, text in (("times", " × "), ("cdot", " · "), ("approx", "≈"), ("le", "≤"),
+                          ("ge", "≥"), ("left", ""), ("right", "")):
+        value = re.sub(rf"\\{command}(?![A-Za-z])", text, value)
     value = value.replace(r"\;", " ").replace(r"\,", " ").replace(r"\ ", " ")
-    value = value.replace(r"\!", "").replace(r"\left", "").replace(r"\right", "")
+    value = value.replace(r"\!", "")
     value = _MACRO_PATTERN.sub(
         lambda match: MACRO_TEXT.get(match.group(1), match.group(0)), value)
     value = value.replace("{", "").replace("}", "")

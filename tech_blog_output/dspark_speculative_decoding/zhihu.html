@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大模型推理加速：从隐藏状态提取到 DSpark 投机解码的工程实践</title>
+<style>
+  :root { --ink:#1a1a1a; --muted:#8590a6; --line:#ebebeb; --accent:#056de8; --code:#f6f6f6; --bg:#fff; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .bar { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+          padding:10px 16px; background:#f8f9fb; border-bottom:1px solid var(--line); font-size:14px; }
+  .bar button { padding:6px 14px; border:1px solid var(--accent); border-radius:4px; cursor:pointer;
+                 background:var(--accent); color:#fff; font-size:14px; }
+  .bar button.ghost { background:#fff; color:var(--accent); }
+  .bar .hint { color:var(--muted); }
+  main { max-width:690px; margin:0 auto; padding:24px 16px 80px; }
+  h1.title { font-size:26px; line-height:1.4; margin:8px 0 20px; }
+  #article h2 { font-size:22px; margin:32px 0 12px; }
+  #article h3 { font-size:19px; margin:24px 0 10px; }
+  #article img { max-width:100%; }
+  #article img[eeimg] { max-width:none; vertical-align:middle; }
+  #article p.pic { margin:16px 0 4px; text-align:center; }
+  #article .formula { text-align:center; overflow-x:auto; }
+  #article blockquote { margin:16px 0; padding:0 14px; border-left:3px solid #d3d3d3; color:#646464; }
+  #article pre { background:var(--code); padding:12px 14px; overflow-x:auto; border-radius:4px; font-size:14px; }
+  #article code { background:var(--code); padding:1px 4px; border-radius:3px; font-size:0.92em; }
+  #article pre code { background:none; padding:0; }
+  #article table { border-collapse:collapse; margin:16px 0; font-size:14px; display:block; overflow-x:auto; }
+  #article th, #article td { border:1px solid var(--line); padding:6px 10px; vertical-align:top; }
+  #article th { background:#f6f6f6; }
+  #article hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="copy-body">复制正文</button>
+  <button id="copy-title" class="ghost">复制标题</button>
+  <span class="hint" id="status">图片使用 GitHub Pages 外链，公式为知乎公式图片。在知乎编辑器正文处粘贴（Ctrl/⌘+V）。</span>
+</div>
+<main>
+  <h1 class="title" id="title">大模型推理加速：从隐藏状态提取到 DSpark 投机解码的工程实践</h1>
+  <article id="article">
+<p><strong>原视频</strong>：<a href="https://www.bilibili.com/video/BV18E3u63EdR">DSpark：投机解码详解</a> · <strong>配套资料</strong>：<a href="https://drive.google.com/file/d/1V-9hwDbbXJQFdCNKptFWOMprSqrhQNbq/view">DSpark 投机解码分享</a></p>
+<p>大模型自回归生成的核心瓶颈众所周知——每步只产出一个 token，每步都要把全部参数从显存搬到计算单元，GPU 算力大量闲置。投机解码（Speculative Decoding）通过"小模型猜、大模型验"的范式打破了这一局面，但草稿质量不够高、隐藏状态获取成本过大、集群部署链路不通等工程矛盾，使得真正落地远比算法论文描述的复杂。</p>
+<p>本文围绕 Speculators 库与 DSpark 算法，拆解从 Drafter 训练到 vLLM 原生部署的端到端链路：算法层面，DSpark 如何用 Markov Head 以不到 1.3% 的延迟代价换回 18–30% 的接受长度增益；工程层面，在线隐藏状态提取如何复用 KVConnector 管道、Mooncake Store 如何补齐跨节点传输的最后一环。</p>
+<p><strong>适读人群：</strong> 熟悉大模型推理基础，希望深入了解投机解码底层机制与工程优化的后端或 AI 系统工程师。</p>
+<p><strong>前置知识：</strong></p>
+<ul>
+<li>了解大模型自回归生成的基本原理</li>
+<li>熟悉 vLLM 等推理引擎的基本概念</li>
+<li>对投机解码有初步认知</li>
+</ul>
+<p><strong>阅读目标：</strong></p>
+<ol>
+<li>理解接受长度对投机解码加速比的决定性作用</li>
+<li>掌握 DSpark 通过 Markov Head 修正并行生成的原理</li>
+<li>了解在线隐藏状态提取复用 KVConnector 的工程巧思</li>
+<li>认识 Mooncake Store 在跨节点数据传输中的关键作用</li>
+</ol>
+<hr>
+<h2>一、投机解码的工程价值与核心矛盾</h2>
+<h3>一次前向产出多个 token</h3>
+<p>投机解码的核心思路可以拆为三步：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>角色</th>
+<th>做什么</th>
+<th>关键性质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>提议</strong></td>
+<td>轻量 Drafter（草稿模型）</td>
+<td>快速生成 <img src="https://www.zhihu.com/equation?tex=k" alt="k" class="ee_img tr_noresize" eeimg="1"> 个候选 token</td>
+<td>可自回归（如 EAGLE-3），也可并行（如 DFlash / DSpark）</td>
+</tr>
+<tr>
+<td><strong>验证</strong></td>
+<td>Target（目标大模型）</td>
+<td>一次前向传播同时对 <img src="https://www.zhihu.com/equation?tex=k" alt="k" class="ee_img tr_noresize" eeimg="1"> 个位置打分</td>
+<td>仅需 1 次完整前向，开销约等于生成 1 个 token</td>
+</tr>
+<tr>
+<td><strong>提交</strong></td>
+<td>拒绝采样（Rejection Sampling）</td>
+<td>接受最长正确前缀，并由 Target 重采样第一个不一致位置</td>
+<td><strong>无损</strong>——Target 的输出分布与不使用投机解码时完全相同</td>
+</tr>
+</tbody>
+</table>
+<p>"无损"是投机解码区别于量化、剪枝等传统加速手段的根本优势：它不改变大模型的输出质量，纯粹通过减少前向传播次数来换取速度。</p>
+<h3>图解：一次验证提交多个 token</h3>
+<p>下图展示了投机解码中"提议-验证-提交"的完整过程，帮助理解每个阶段的数据流和判定逻辑。</p>
+<p><img alt="投机解码流程：Drafter 提议 4 个 token，Target 验证后接受 3 个并重采样 1 个" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-03.png">
+<em>图注：投机解码提议-验证-提交流程。来源：演讲 PPT 第 3 页</em></p>
+<p>逐项拆解图中的关键元素：</p>
+<ol>
+<li><strong>Drafter 提议 4 个 token</strong>：草稿模型一次给出候选序列 <code>jumps over the lazy</code>。</li>
+<li><strong>Target 一次前向验证</strong>：大模型接收全部 4 个候选，在同一次前向传播中分别计算各位置的 log probability。</li>
+<li><strong>前 3 个通过</strong>：对于 <code>jumps</code>、<code>over</code>、<code>the</code> 三个位置，Target 的置信度不低于 Drafter 的置信度，通过拒绝采样予以接受。</li>
+<li><strong>第 4 个被拒绝</strong>：<code>lazy</code> 在 Target 看来 log probability 不够高，被拒绝。</li>
+<li><strong>重采样获得 bonus token</strong>：Target 在被拒绝的位置依据自身分布重新采样，产出 <code>dog</code>。这个 token 来自 Target 本轮前向已经计算好的 logit，无需额外开销。</li>
+<li><strong>最终提交 4 个 token</strong>：3 个接受 + 1 个重采样 = 一次 Target 步骤净增 4 个 token。</li>
+</ol>
+<h3>接受长度：加速比的第一决定因素</h3>
+<p>整条因果链可以浓缩为：</p>
+<pre><code>Drafter 快速提议 k 个 token
+  → Target 一次前向传播验证全部 k 个位置
+    → 验证成本 ≈ 单步生成 1 个 token 的成本
+      → 净产出 = 接受长度 α（平均接受的前缀长度 + 1 bonus）
+        → 等效吞吐提升 ≈ α 倍
+</code></pre>
+<p>这里的关键变量是<strong>接受长度</strong>（Acceptance Length）——每次 Target 步骤平均产出的 token 数。如果 Drafter 猜得不准，频繁被拒绝，接受长度趋近于 1，投机解码就退化为普通自回归生成，反而因为额外运行 Drafter 而浪费算力。</p>
+<p>以一个最小例子说明：假设输入上下文为 <code>The</code>，Drafter 提议 3 个 token：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>Drafter 提议</th>
+<th>Target 判定</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>位置 1</td>
+<td><code>lazy</code></td>
+<td>✓ 接受</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>位置 2</td>
+<td><code>dog</code></td>
+<td>✓ 接受</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>位置 3</td>
+<td><code>runs</code></td>
+<td>✗ 拒绝</td>
+<td>Target 重采样 → <code>sat</code></td>
+</tr>
+</tbody>
+</table>
+<p>一次 Target 前向传播净产出 3 个 token（<code>lazy dog sat</code>），等效加速约 3 倍。</p>
+<h3>加速边界</h3>
+<p>据演讲中分享的工程实测经验，在 vLLM（一个开源的大模型推理和服务引擎）上通常观测到的端到端加速比在 <strong>3–5 倍</strong>左右，具体取决于算法与负载。但投机解码存在一个硬性边界：</p>
+<blockquote>
+<p><strong>当推理引擎处于 compute bound（计算瓶颈）状态时，投机解码无法带来收益，反而消耗额外算力。</strong></p>
+</blockquote>
+<p>原因很直接：投机解码的本质是"用多余算力换取更少的显存搬运次数"。一旦请求并发量很高、GPU 算力已经饱和，就没有多余算力可用。此时建议动态关闭投机解码，将全部计算资源留给 Target 本身。</p>
+<p><strong>小结：</strong> 投机解码以无损方式将每步单 token 的瓶颈拓宽为每步多 token，其加速效果取决于接受长度。接下来的核心问题是：如何训练出更准的 Drafter，以推高接受长度？</p>
+<hr>
+<h2>二、现代 Drafter 的进化：从文本到隐藏状态</h2>
+<h3>早期方案为何接受率有限</h3>
+<p>早期投机解码的思路很朴素：拿同系列的小参数模型做草稿——两者都接收相同的自然语言文本，小模型先猜，大模型后验。但小模型和大模型虽然读到同样的 prompt，内部的"理解深度"天差地别。小模型用有限参数猜测下一个词，而大模型的预测来自数十层 Transformer 逐层蒸馏出的丰富语义。纯文本输入下，两者的输出分布偏差难以弥合，<strong>接受率</strong>（Acceptance Rate，每个位置被确认的概率）始终上不去，接受长度也随之受限。</p>
+<h3>关键转折：让 Drafter 窥探 Target 的中间表示</h3>
+<p>突破始于一个核心洞察——与其让 Drafter 从原始文本重新"理解"一遍 prompt，不如直接把 Target 模型在 prefill 阶段产生的中间结果喂给它。</p>
+<p>这里需要定义一个关键概念：<strong>隐藏状态（Hidden States）</strong>，即 Transformer 各层的中间激活值。Target 模型每处理一个 token 序列，都会在每层输出一组向量，这些向量编码了该层对输入文本的语义理解——越深的层抽象程度越高。将若干层隐藏状态抽取出来作为 Drafter 的输入，等于让小模型直接站在大模型的语义基础上做预测，而非从零开始推断。</p>
+<h3>架构：Verifier 与 Draft 模型如何协作</h3>
+<p>下图展示了 Target（图中标为 Verifier）如何将多层激活传递给 Draft 模型，是理解后续各节的架构基础。</p>
+<p><img alt="Verifier 模型将多层隐藏状态传递给 Draft 模型的协作架构" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-04.png">
+<em>图注：左侧为 Verifier（Target）模型，右侧为 Draft 模型；箭头表示隐藏状态的传递路径。来源：演讲 PPT 第 4 页</em></p>
+<p>图中包含两个核心组件和一条关键数据通路：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>角色</th>
+<th>特征</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Verifier Model</strong>（左侧）</td>
+<td>接收原始 token，执行完整前向传播，输出预测并验证草稿</td>
+<td>层数多、参数量大</td>
+</tr>
+<tr>
+<td><strong>Draft Model</strong>（右侧）</td>
+<td>接收隐藏状态，快速生成多个候选 token</td>
+<td>层数少（3–5 层），推理极快</td>
+</tr>
+</tbody>
+</table>
+<p>数据流依次为：① Verifier 接收输入 token；② 从 Verifier 的多个层级抽取隐藏状态，传入 Draft 模型；③ Draft 模型据此输出候选 token；④ Verifier 自身也生成预测，与草稿逐 token 比对验证。</p>
+<p>用两条路径对比能最清晰地看出差异：</p>
+<ul>
+<li><strong>纯文本路径</strong>：相同 prompt → 小模型独立理解 → 缺少大模型的中间推理线索 → 输出分布偏差大 → 接受率低</li>
+<li><strong>隐藏状态路径</strong>：Target prefill 产生多层激活 → Drafter 获得中间语义表示 → 输出分布贴近 Target → 接受率提升 → 接受长度增长</li>
+</ul>
+<h3>不同算法的层数策略</h3>
+<table>
+<thead>
+<tr>
+<th>算法</th>
+<th>提取层数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EAGLE-3（一种经典自回归投机解码算法）</td>
+<td>1 层</td>
+<td>结构最简，开销最低</td>
+</tr>
+<tr>
+<td>DFlash / DSpark</td>
+<td>3–5 层</td>
+<td>多层融合，语义信息更丰富</td>
+</tr>
+</tbody>
+</table>
+<p>层数增加带来更丰富的 Target 内部信息，但也意味着更大的激活传输和存储成本。3–5 层是当前高性能 Drafter 的常见选择，在信息量与工程开销间取得了实用平衡。</p>
+<p><strong>小结：</strong> 从自然语言输入切换到隐藏状态输入，是投机解码从"文本级模仿"走向"表示级学习"的分水岭。在此基础上，DSpark 围绕"如何利用这些隐藏状态做更高效的并行草稿"展开了更精细的架构设计。</p>
+<hr>
+<h2>三、DSpark 算法：并行骨干与 Markov 修正</h2>
+<h3>并行生成为何会"胡言乱语"</h3>
+<p>自回归生成的核心保障是：每个 token 都能看到它左侧已经确定的所有 token。一旦改为并行生成——一次前向同时产出多个位置——各位置之间互相不知道对方的预测结果，token 间的条件依赖就断裂了。</p>
+<p>以一个最小例子说明：用户说 "thank you"，合理回复既包含 "no problem"，也包含 "of course"。自回归模型若在第一个位置输出了 "of"，第二个位置必然选 "course"；但并行生成时，第一位置选了 "of"，第二位置却独立选出 "problem"，拼成 "of problem"——输出退化为无意义组合。这正是 DFlash（一种基于非因果 mask token 的并行投机解码算法）面临的核心瓶颈。</p>
+<p><strong>DSpark</strong>（一种投机解码算法，结合 DFlash 式并行骨干和 Markov Head 建模块内依赖）的设计目标就是：<strong>保留 DFlash 的并行吞吐，同时以极低代价恢复块内一致性</strong>。</p>
+<h3>DSpark 解码循环全景</h3>
+<p>下图是 DSpark 每一轮解码的三阶段全貌，展示了并行骨干、Markov 修正和置信度调度如何协同工作。</p>
+<p><img alt="DSpark 解码循环：重型并行骨干、Markov head 修正与前缀调度器三步流程" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-10.png">
+<em>图注：DSpark 三阶段解码循环。来源：演讲 PPT 第 10 页</em></p>
+<h4>① Target Step：确定锚点</h4>
+<p>Target 模型执行一次自回归前向，输出已接受序列末尾的下一个 token，记为 <strong>D</strong>。D 即本轮草稿的<strong>锚点（anchor）</strong>——后续并行位置的左边界条件。</p>
+<h4>② DSpark Drafting Engine：并行骨干 + Markov 修正 + 前缀调度</h4>
+<p>这一步是 DSpark 的核心，内部分三层：</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>组件</th>
+<th>输入</th>
+<th>输出</th>
+<th>开销</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>并行骨干（DFlash）</td>
+<td>锚点 D + mask positions</td>
+<td>所有位置的 logits U₁–U₄</td>
+<td>一次非因果前向</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Markov Head</strong></td>
+<td>U₁–U₄</td>
+<td>修正后的 token 序列 E, F, G, H</td>
+<td>低秩偏置，近乎零成本</td>
+</tr>
+<tr>
+<td>3</td>
+<td>前缀调度器</td>
+<td>置信度 c₁–c₄</td>
+<td>保留高置信前缀；丢弃低置信尾部</td>
+<td>仅比较阈值</td>
+</tr>
+</tbody>
+</table>
+<p><strong>并行骨干</strong>：锚点 D 与若干 mask 位置一起送入 DFlash，执行一次非因果前向，同时得到 U₁–U₄ 四个位置的 logits，吞吐与原始 DFlash 完全相同。</p>
+<p><strong>Markov Head</strong>（用于修正并行生成 token 依赖关系的轻量序列头）：对 U₁–U₄ 从左到右依次施加<strong>低秩偏置（low-rank bias）</strong>。具体地，位置 k+1 的 logits 会叠加一个由位置 k 的已选 token 决定的偏置项——E 修正后得到 F，F 修正后得到 G，以此类推。Markov Head 本质上是一个轻量的亲和矩阵，学习 token 到 token 的接续概率，因为偏置矩阵是低秩的，附加延迟极小。</p>
+<p><strong>前缀调度器（Prefix Scheduler）</strong>：每个位置同时输出一个置信度分数。调度器从左到右扫描，一旦置信度低于阈值，就将该位置及其右侧全部截断。这使得<strong>模型不确定时草稿自动缩短</strong>，避免将低质量 token 送入 Target 浪费批次容量。</p>
+<h4>③ Parallel Verify：验证与发射</h4>
+<p>Target 模型对保留的草稿 token 执行一次并行验证。被接受的直接采纳；第一个被拒绝的位置由 Target 重采样，产出修正 token 作为下一轮锚点，循环重新开始。</p>
+<h3>因果链</h3>
+<pre><code>纯并行生成 → token 间依赖断裂 → 输出一致性下降
+  → 引入 Markov Head（低秩偏置，从左到右逐位修正）
+    → 恢复块内条件依赖 → 接受率回升
+      → 叠加置信度头 → 前缀调度器截断低置信尾部
+        → 草稿长度自适应 → Target 验证开销进一步降低
+</code></pre>
+<h3>边界与现状</h3>
+<p>Markov Head 与置信度头是两个独立机制，可以单独启用或组合使用。目前在 Speculators（一个覆盖训练、转换到 vLLM 部署的投机解码库）训练侧二者均已支持；但在 vLLM 推理端，<strong>置信度头的推理支持尚未完全就绪</strong>，相关工作仍在进行中。因此，当前线上部署主要依赖 Markov Head 修正来提升接受率，置信度调度的实际收益还有待工程侧的进一步验证。</p>
+<hr>
+<h2>四、DSpark 性能验证与边界条件</h2>
+<h3>离线评测设置</h3>
+<p>为了公平比较 EAGLE-3（自回归草稿）、DFlash（非因果并行草稿）和 DSpark（并行骨干 + Markov Head）三种策略，评测在以下受控条件下进行：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>取值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>目标模型</td>
+<td>Qwen3-14B</td>
+</tr>
+<tr>
+<td>采样温度</td>
+<td>1.0</td>
+</tr>
+<tr>
+<td>草稿模式</td>
+<td>链式草稿（chained drafting）</td>
+</tr>
+<tr>
+<td>置信度调度器</td>
+<td>关闭</td>
+</tr>
+<tr>
+<td>块长范围</td>
+<td>4 → 16</td>
+</tr>
+<tr>
+<td>批大小</td>
+<td>128</td>
+</tr>
+</tbody>
+</table>
+<p>温度设为 1.0 意味着采样随机性最大，对草稿模型的预测精度要求更高；关闭置信度调度器则排除了自适应裁剪对结果的干扰，使对比更纯粹地反映草稿质量本身。</p>
+<h3>基准数据一览</h3>
+<p>下图展示了三种算法在五个代表性任务上的接受长度对比，是判断 Markov Head 实际收益的核心证据。</p>
+<p><img alt="DSpark 离线效果对比表，展示三种算法在五个数据集上的接受长度及宏平均提升" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-11.png">
+<em>图注：离线效果对比——DSpark 在所有基准上全面领先两条基线。来源：演讲 PPT 第 11 页</em></p>
+<p>指标是<strong>接受长度（含 bonus token）</strong>，即目标模型一次验证后实际采纳的 token 数，数值越大说明草稿越准、加速越明显：</p>
+<table>
+<thead>
+<tr>
+<th>数据集</th>
+<th>EAGLE-3</th>
+<th>DFlash</th>
+<th>DSpark</th>
+<th>DSpark 领先 DFlash</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GSM8K</td>
+<td>5.24</td>
+<td>5.41</td>
+<td><strong>6.21</strong></td>
+<td>+14.8%</td>
+</tr>
+<tr>
+<td>MATH500</td>
+<td>4.60</td>
+<td>4.84</td>
+<td><strong>5.74</strong></td>
+<td>+18.6%</td>
+</tr>
+<tr>
+<td>MBPP</td>
+<td>3.81</td>
+<td>4.44</td>
+<td><strong>5.26</strong></td>
+<td>+18.5%</td>
+</tr>
+<tr>
+<td>HumanEval</td>
+<td>4.14</td>
+<td>4.59</td>
+<td><strong>5.43</strong></td>
+<td>+18.3%</td>
+</tr>
+<tr>
+<td>MT-Bench</td>
+<td>2.62</td>
+<td>3.10</td>
+<td><strong>3.70</strong></td>
+<td>+19.4%</td>
+</tr>
+</tbody>
+</table>
+<p>表格下方的宏平均汇总：</p>
+<ul>
+<li><strong>+30.0%</strong> ——DSpark 相对 EAGLE-3 的宏平均接受长度提升</li>
+<li><strong>+18.3%</strong> ——DSpark 相对 DFlash 的宏平均提升</li>
+<li><strong>+0.2\~1.3%</strong> ——Markov Head 引入的单轮延迟开销，块长从 4 增至 16 时逐渐增大，但始终不超过 1.3%</li>
+</ul>
+<h3>为什么 Markov Head 如此高效</h3>
+<ol>
+<li><strong>块内依赖缺失 → DFlash 精度衰减。</strong> DFlash 采用非因果 mask 并行生成一整块 token，块内位置之间彼此看不到。块内位置接受率数据显示，DFlash 在数学任务上从首位约 0.88 衰减到块尾约 0.78。</li>
+<li><strong>Markov Head 注入低秩偏置 → 块内精度恢复。</strong> 从左到右为每个下一位置叠加低秩偏置，修正并行带来的独立性假设误差。同一指标下，DSpark 从约 0.93 起步且全块保持平稳。</li>
+<li><strong>位置接受率提升 → 接受长度增加。</strong> 接受长度本质上由各位置接受率的乘积决定：每个位置多几个百分点，最终可累积出 18–30% 的增长。</li>
+<li><strong>低秩结构 → 极低延迟开销。</strong> 序列头参数量远小于并行骨干，额外计算仅占单轮推理时间的 0.2–1.3%。付出不到 1.3% 的时间代价，换回 18–30% 的有效 token 增益。</li>
+</ol>
+<h3>待验证与适用边界</h3>
+<ul>
+<li><strong>温度敏感性：</strong> 上述结果均在温度 1.0 下取得。低温时草稿命中率通常更高，DSpark 的相对优势幅度可能变化，但演讲材料未给出低温对比数据。</li>
+<li><strong>在线端到端延迟：</strong> 此处评测聚焦"接受长度"这一离线指标。实际部署的端到端加速比还受调度器效率、KV 缓存管理等因素影响，需要在线环境另行验证。</li>
+<li><strong>置信度调度器的叠加效果：</strong> 本表关闭了该调度器，数据仅体现 Markov Head 本身的贡献。</li>
+</ul>
+<p><strong>小结：</strong> 在受控离线条件下，DSpark 以不超过 1.3% 的延迟代价实现了对两条基线的全面领先。然而，训练这样一个高精度 Drafter，首先需要大规模、高质量的隐藏状态数据——这正是工程落地中最大的瓶颈所在。</p>
+<hr>
+<h2>五、训练数据瓶颈：离线落盘的带宽墙</h2>
+<h3>两条路径的全景对比</h3>
+<p>Drafter 的知识蒸馏建立在 Target 模型的中间层激活之上，数据规模往往达到数十亿 token。获取这些隐藏状态存在截然不同的两条工程路径。下图给出了离线落盘与在线流式的完整对比，是理解后续两节工程设计的出发点。</p>
+<p><img alt="离线落盘与在线流式两条隐藏状态获取路径的对比示意" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-13.png">
+<em>图注：离线路径需经磁盘中转，在线路径直接 produce → consume → free，路径上没有持久存储。来源：演讲 PPT 第 13 页</em></p>
+<p>图中上半部分展示了离线路径：vLLM Target 执行 prefill 后，将隐藏状态 <strong>write</strong> 到磁盘，形成巨量的 hidden-state dump 文件；训练器再从磁盘 <strong>read</strong> 回这些数据。下半部分是在线路径：vLLM Target 产出的隐藏状态直接以流式方式送达训练器，用完即弃，路径上不存在任何持久化存储节点。</p>
+<h3>离线路径的三重致命瓶颈</h3>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>瓶颈描述</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>写入</strong></td>
+<td>每个 token 的多层隐藏状态体积巨大，写入磁盘带宽被打满</td>
+<td>落盘耗时从数小时膨胀到数天</td>
+</tr>
+<tr>
+<td><strong>回读</strong></td>
+<td>训练时需从磁盘反复读回，磁盘 I/O 远低于显存带宽</td>
+<td>训练 GPU 长时间空等，利用率骤降</td>
+</tr>
+<tr>
+<td><strong>陈旧</strong></td>
+<td>落盘数据严格绑定当次 Target 模型权重与精度配置</td>
+<td>模型或量化方案一旦变更，全部数据作废</td>
+</tr>
+</tbody>
+</table>
+<p>用一个具体数据锚点来感受规模：以 GLM-5.2 在 OpenPerfectBlend 数据集上重生成为例，累计产出<strong>约 239 TB</strong> 的 dump 文件。这在绝大多数生产环境中都不现实。</p>
+<p>更致命的是陈旧问题：假设团队花费数天完成落盘，此时业务侧对 Target 模型做了一次参数微调或量化精度调整，由于隐藏状态与 Target 权重严格耦合，<strong>先前所有落盘数据瞬间失去价值</strong>，必须从零重跑整个提取流程。</p>
+<h3>在线流式的破局思路</h3>
+<p>在线路径的核心设计极其简洁：训练器向 vLLM Target 发起批量请求，Target 在 prefill 阶段产出隐藏状态后，激活数据被直接消费、随即释放，<strong>每批即用即弃</strong>。离线方案的三重瓶颈被同时消除——无需海量存储、无磁盘回读延迟、激活始终来自当前版本的 Target 模型，天然零陈旧。</p>
+<p>在数据量需求方面，通用场景下训练 Drafter 通常准备约 50 万条对话数据（如 Magpie、UltraChat 等）；而针对特定领域的微调场景，经验表明 3 万至 7 万条数据即可取得较好的加速收益（此为演讲中分享的实践经验值，非严格实验结论）。在线流式使得按需获取这些数据成为低成本操作。</p>
+<p><strong>结论：</strong> 离线落盘在存储规模、读写带宽和数据时效性三个维度同时碰壁。在线提取是实际可行的选择，但它引入了新的工程问题——如何在不侵入 vLLM 核心逻辑的前提下，把隐藏状态"搬"出来？</p>
+<hr>
+<h2>六、在线提取机制：伪装成 KV 的巧妙设计</h2>
+<h3>从"造通路"到"借通路"</h3>
+<p>最直觉的在线提取做法是在推理引擎里新造一条专用管道，但这意味着深度侵入 vLLM 的调度与内存管理逻辑——工程成本高、升级易冲突。更优的策略是复用引擎已有的高带宽通路。</p>
+<p>推导过程分为四步：</p>
+<ol>
+<li>新造通路需要重写调度、内存分配和并发控制，维护负担大。</li>
+<li>vLLM 内部已经为 <strong>KV Cache</strong>（注意力计算中缓存的 Key/Value 张量）打磨了一套成熟的 KVConnector 传输管道。</li>
+<li>KV Cache 槽位按 <code>[Token, num_heads, head_size]</code> 组织；辅助激活栈恰好也是三维张量 <code>[T, L, H]</code>。</li>
+<li>只要把层轴 <code>L</code> 映射到 <code>num_heads</code>、隐藏维 <code>H</code> 映射到 <code>head_size</code>，即可严丝合缝地嵌入现有槽位。</li>
+</ol>
+<h3>维度映射细节</h3>
+<p>Target 前向时，从指定的中间层（例如第 8、23、39、55、70 层）抽取激活值并沿层轴堆叠，得到一个形状为 <code>[T, L, H]</code> 的张量：</p>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+<th>对应 KV 槽位语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T</code></td>
+<td>当前批次的 token 数</td>
+<td>Token 维——保持不变</td>
+</tr>
+<tr>
+<td><code>L</code></td>
+<td>抽取的层数（如 5 层）</td>
+<td>被视作 <code>num_heads</code></td>
+</tr>
+<tr>
+<td><code>H</code></td>
+<td>每层隐藏状态维度</td>
+<td>被视作 <code>head_size</code></td>
+</tr>
+</tbody>
+</table>
+<p>这一映射不需要任何 <code>reshape</code> 或转置操作——内存布局天然一致，引擎将其当作一组"虚拟注意力头"直接写入 KV 槽位并经 KVConnector 送出。</p>
+<p>下图展示了伪装的具体映射关系和数据在引擎中的流转路径。</p>
+<p><img alt="辅助激活栈的维度伪装为 KV 槽位的映射示意" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-14.png">
+<em>图注：隐藏状态提取与 KV 伪装机制——层轴充当 num_heads，隐藏维充当 head_size，直接落入现有 KV 槽位。来源：演讲 PPT 第 14 页</em></p>
+<p>图中自上而下展示三个阶段：</p>
+<ul>
+<li><strong>Target 前向</strong>：从五个指定层抽出激活，堆叠为辅助激活栈 <code>[T, L, H]</code>。</li>
+<li><strong>伪装成 KV</strong>：将 <code>L</code> 标记为 <code>num_heads</code>、<code>H</code> 标记为 <code>head_size</code>，无需拷贝或重排即可装入 KV Cache 槽位。</li>
+<li><strong>KVConnector 送出</strong>：沿用服务侧已有的传输管道，将伪装后的"KV"发送给训练器，还可复用前缀缓存的好处。</li>
+</ul>
+<h3>最小状态演进</h3>
+<p>假设抽取 5 层、隐藏维度为 4096、当前批次含 32 个 token：</p>
+<pre><code>原始辅助激活栈形状: [32, 5, 4096]
+引擎眼中的 KV 形状: [32, num_heads=5, head_size=4096]
+→ 直接写入 KV 槽位，零字节拷贝
+→ KVConnector 按常规 KV 传输流程送出
+→ 训练器收到后按 [T, L, H] 语义还原使用
+</code></pre>
+<p>整个过程中不触发额外的注意力计算，也不修改引擎对 KV Cache 的管理逻辑。</p>
+<h3>边界与局限</h3>
+<p>这一方案的前提是 KVConnector 的实现要求生产者（Target 推理进程）与消费者（训练器）位于<strong>同一节点</strong>，共享部分内存区域。当模型规模大到单节点无法部署，或训练与推理需要分别放在不同节点池时，这种本地共享内存的约束便成为瓶颈——这正是引入跨节点连接器的直接动因。</p>
+<hr>
+<h2>七、跨节点传输：引入 Mooncake Store</h2>
+<h3>分池部署带来的传输困境</h3>
+<p>当 Target 模型达到 Qwen3（千问大模型系列）量级时，GPU 显存几乎不允许推理和训练共存于同一台机器。工程上的解法是<strong>分池</strong>：推理节点专注跑在线 prefill，训练节点专注消费隐藏状态做梯度更新。分池一旦成立，跨网络传输就成了绕不开的问题。</p>
+<h3>四条硬性要求</h3>
+<p>演讲中明确列出了这条传输路径必须同时满足的四项约束：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">编号</th>
+<th>要求</th>
+<th>现实原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">①</td>
+<td>跨节点，且不假设共享文件系统</td>
+<td>生产者池和训练器池位于不同机器，许多集群不具备高速共享 FS</td>
+</tr>
+<tr>
+<td style="text-align: center;">②</td>
+<td>按 key 寻址</td>
+<td>生产者不知道谁来消费、何时消费；两侧无法互相寻址</td>
+</tr>
+<tr>
+<td style="text-align: center;">③</td>
+<td>单边读取（one-sided read）</td>
+<td>传输操作不能占用生产者 CPU——它仍在为线上请求服务</td>
+</tr>
+<tr>
+<td style="text-align: center;">④</td>
+<td>有界 + 可驱逐</td>
+<td>若消费者掉线，生产速度超过消费速度时必须能停写和清理</td>
+</tr>
+</tbody>
+</table>
+<p>其中第④点尤为关键：演讲者提到实际训练中曾出现过消费端停止工作而生产端持续写入、最终磁盘写满的事故。</p>
+<h3>候选方案对比</h3>
+<p>下图列出了四种候选方案对四项要求的满足情况，是选择 Mooncake Store 的决策依据。</p>
+<p><img alt="Mooncake connector 候选方案对比与四条硬性要求" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-15.png">
+<em>图注：跨网络传输候选方案及其对四项要求的满足情况。来源：演讲 PPT 第 15 页</em></p>
+<p>逐一分析：</p>
+<ul>
+<li><strong>共享文件系统</strong> ✗ —— 磁盘 I/O 横在传输路径中间，且依赖集群预装高速 FS，通用性差。</li>
+<li><strong>NCCL 等集合通信</strong> ✗ —— 需要固定通信域和锁步参与，而此场景是异步、动态、多对多的拓扑，完全不匹配。</li>
+<li><strong>直接 RDMA / UCX</strong> ～ —— 带宽足够，但寻址、生命周期管理、驱逐和背压策略全需从零实现，工程量大。</li>
+<li><strong>Mooncake Store</strong> ✓ —— 四条要求全部满足，且 vLLM 在做 PD（Prefill-Decode）分离时已经集成过该组件，成熟度较高。</li>
+</ul>
+<h3>Mooncake Store 的工作方式</h3>
+<p><strong>Mooncake</strong>（一种跨网络连接器 / Store）提供跨节点、按 key 寻址、支持单边读取的键值存储能力，专为隐藏状态等中间张量的高速传输设计。其核心特征包括：写入方只需 <code>put(key, tensor)</code>，读取方凭 key 即可主动拉取，无需生产者参与调度；同时内置有界缓冲和 TTL 驱逐机制。</p>
+<p>一次最小工作流：</p>
+<ol>
+<li><strong>vLLM 推理节点</strong>在完成一次 prefill 后，将隐藏状态以 <code>(request_id, tensor)</code> 的形式写入本地 Mooncake Store，随即返回继续处理下一请求——CPU 不被传输阻塞。</li>
+<li><strong>Trainer 节点</strong>根据已知的 <code>request_id</code>（key），通过 RDMA 单边读取从 Mooncake Store 拉取对应张量，整个过程不打断推理侧的任何线程。</li>
+<li>若 Trainer 节点长时间未消费，Mooncake Store 按 TTL 策略自动驱逐过期数据，防止内存溢出。</li>
+</ol>
+<p><strong>结论与边界：</strong> Mooncake Store 补齐了集群规模在线提取的关键一环。其适用边界在于依赖 RDMA 网络的可用性；演讲材料未给出跨节点传输的具体带宽或延迟基准数据，实际吞吐还需结合集群网络拓扑评估。</p>
+<hr>
+<h2>八、Speculators：端到端的一站式闭环</h2>
+<h3>最后一公里的门槛</h3>
+<p>前面各节讨论了 DSpark 的算法设计、隐藏状态的在线提取和跨节点传输。然而在实际生产中，工程师面对的另一道门槛是：<strong>训练好的 Drafter 如何才能零改造地跑在推理引擎里？</strong> 传统做法通常需要手动编写模型加载逻辑、对齐配置参数、维护格式转换脚本，任何一环出错都可能导致精度或性能回退。</p>
+<p>Speculators 库正是为消除这段距离而设计的，它覆盖 <strong>数据准备 → 隐藏状态提取 → 模型训练 → 格式转换 → 推理部署</strong> 的全流程，核心承诺是：<strong>训练产出的 Drafter checkpoint 与 config，无需任何胶水代码即可被 vLLM 原生加载并启动服务。</strong> 它同时支持在线提取、离线提取以及混合模式，也覆盖 MoE（混合专家模型）和 VLM（视觉语言模型）等架构。</p>
+<h3>一份 config.json 如何驱动 vLLM</h3>
+<p>下图展示了 Speculators 导出的 <code>config.json</code> 关键字段以及 vLLM 的自动检测流程，是理解"零胶水"如何实现的核心。</p>
+<p><img alt="Speculators 导出的 config.json 关键字段与 vLLM 自动检测流程" src="https://princepride.github.io/live-streaming-tools/dspark_speculative_decoding/final/assets/slides/slide-09.png">
+<em>图注：config.json 核心字段与 vLLM 自动检测机制。来源：演讲 PPT 第 9 页</em></p>
+<p>图中的 JSON 配置包含以下关键字段，每一项都与训练参数严格对应：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>示例值</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>speculators_model_type</code></td>
+<td><code>"dspark"</code></td>
+<td>告诉 vLLM 选择 DSpark 草稿路径</td>
+</tr>
+<tr>
+<td><code>verifier</code></td>
+<td><code>"GLM-5.2-FP8"</code></td>
+<td>锁定训练时对应的 Target 模型标识</td>
+</tr>
+<tr>
+<td><code>markov_rank</code></td>
+<td><code>256</code></td>
+<td>Markov Head 中低秩分解的秩，决定块内依赖修正的参数量</td>
+</tr>
+<tr>
+<td><code>block_size</code></td>
+<td><code>8</code></td>
+<td>每次草稿生成的 token 块大小</td>
+</tr>
+<tr>
+<td><code>aux_hidden_state_layer_ids</code></td>
+<td><code>[8, 23, 39, 55, 70]</code></td>
+<td>Drafter 在 Target 中抽取隐藏状态的层编号</td>
+</tr>
+<tr>
+<td><code>enable_confidence_head</code></td>
+<td><code>true</code></td>
+<td>是否启用置信度头做提前终止</td>
+</tr>
+<tr>
+<td><code>transformer_layer_config</code></td>
+<td><code>num_hidden_layers: 5</code></td>
+<td>Drafter 自身的 Transformer 层数与架构类型</td>
+</tr>
+</tbody>
+</table>
+<p>图右侧的注释明确指出：<strong>配方（recipe）与 checkpoint 是同一个对象。</strong> 配置文件与权重文件在发布时绑定发行，不存在版本漂移的风险。</p>
+<h3>因果链：为什么能做到"零胶水"</h3>
+<ol>
+<li><strong>传统痛点</strong>：Drafter 训练脚本与推理引擎各自维护参数定义，工程师必须手写转换层把训练格式映射到引擎能识别的格式。一旦参数名、维度或层号对不齐，接受率骤降甚至推理报错。</li>
+<li><strong>Speculators 的解法</strong>：训练结束后直接输出 HuggingFace 兼容的 checkpoint 目录，其中 <code>config.json</code> 携带完整的算法类型与训练超参。vLLM 启动时读取 <code>speculators_model_type</code>，自动路由到对应的草稿构建逻辑，所有参数从同一份 config 注入。</li>
+<li><strong>最终效果</strong>：部署仅需一条命令——<code>vllm serve &lt;模型路径&gt;</code>——引擎即按 config 中的字段组装完整的投机解码推理图。</li>
+</ol>
+<h3>最小部署示例</h3>
+<p>假设已用 Speculators 训练了一个面向 <code>GLM-5.2-FP8</code> 的 DSpark Drafter，导出目录为 <code>RedHatAI/GLM-5.2-speculator.dspark-preview</code>。部署步骤仅有一步：</p>
+<pre><code class="language-bash">vllm serve RedHatAI/GLM-5.2-speculator.dspark-preview
+</code></pre>
+<p>vLLM 读取到 <code>speculators_model_type: "dspark"</code> 后，自动以 <code>markov_rank=256</code>、<code>block_size=8</code> 初始化 Markov Head 和并行草稿骨干。若希望调整低秩分解的秩，只需在重新训练前修改 <code>markov_rank</code>，训练完毕后 config 自然携带新值，部署命令不变。</p>
+<h3>边界条件</h3>
+<p>Speculators 虽大幅降低了投机解码的工程门槛，但存在一条刚性约束：<strong><code>config.json</code> 中 <code>verifier</code> 字段标识的 Target 模型必须与训练时使用的 Target 严格一致。</strong> 如果生产环境切换了 Target 版本（例如从 FP8 量化版换到 BF16 全精度版），Drafter 的隐藏状态输入分布将发生偏移，接受率可能显著下降，此时需要重新训练或至少进行微调。演讲材料未给出跨 Target 版本复用 Drafter 时的性能退化数据。</p>
+<hr>
+<h2>结论与局限</h2>
+<h3>核心结论</h3>
+<ol>
+<li><strong>接受长度是投机解码加速比的第一决定因素。</strong> 一次 Target 验证中被采纳的 token 越多，前向传播次数减少得越多，端到端吞吐提升越明显。</li>
+<li><strong>从文本到隐藏状态的输入升级，是现代 Drafter 获得高接受率的关键。</strong> 提取 Target 模型 3–5 层中间激活进行蒸馏训练，使 Drafter 能复用大模型已完成的语义推理，显著缩小输出分布偏差。</li>
+<li><strong>DSpark 以极低开销解决了并行生成的块内一致性问题。</strong> Markov Head 通过低秩偏置从左到右逐位修正，在 Qwen3-14B、温度 1.0、链式草稿、关闭置信度调度器的受控条件下，相对 EAGLE-3 宏平均接受长度提升 30.0%，相对 DFlash 提升 18.3%，而单轮延迟开销仅 0.2–1.3%。</li>
+<li><strong>离线落盘面临存储（约 239 TB 级别）、带宽和数据陈旧的三重瓶颈。</strong> 在线边训边流方案通过即用即弃的数据流彻底消除了持久化存储需求。</li>
+<li><strong>在线提取复用 KVConnector 管道，将隐藏状态层轴伪装为注意力头维度，实现了零拷贝、零 reshape 的高性价比工程方案。</strong></li>
+<li><strong>Mooncake Store 补齐了跨节点场景的最后一环，满足按 key 寻址、单边读取、有界可驱逐的全部硬性要求。</strong></li>
+<li><strong>Speculators 库提供了一站式解决方案。</strong> 训练产出的 checkpoint 与 config 可被 vLLM 原生加载，消除了从训练到部署之间的胶水代码。</li>
+</ol>
+<h3>明确局限</h3>
+<ul>
+<li><strong>Compute bound 下无收益。</strong> 当推理引擎的 GPU 算力已饱和时，投机解码无法用算力换速度，反而造成额外开销，此时应动态关闭。</li>
+<li><strong>置信度头的推理端支持尚未完全就绪。</strong> DSpark 的置信度调度器机制在 vLLM 中仍处于开发阶段，当前线上部署主要依赖 Markov Head 修正。</li>
+<li><strong>性能数据的适用条件需严格保留。</strong> 30.0% 和 18.3% 的提升数字来自 Qwen3-14B、温度 1.0、链式草稿、关闭置信度调度器、块长 4–16、batch 128 的特定设置，泛化到其他模型和参数时需重新验证。</li>
+<li><strong>Drafter 与 Target 严格耦合。</strong> 一旦 Target 模型版本或量化方案变更，已有 Drafter 的接受率可能显著退化，需要重新训练或微调。</li>
+<li><strong>Mooncake Store 依赖 RDMA 网络。</strong> 演讲材料未提供跨节点传输的具体带宽或延迟基准数据，实际吞吐需结合集群网络拓扑评估。</li>
+</ul>
+  </article>
+</main>
+<script>
+  const status = document.getElementById("status");
+  // Use the browser's native selection copy, the same path as copying from the
+  // website by hand; Zhihu only re-hosts pasted images reliably from that payload.
+  function copyNode(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    status.textContent = ok ? "已复制，去知乎编辑器粘贴即可。" : "已选中内容，请按 Ctrl/⌘+C 复制。";
+    if (ok) selection.removeAllRanges();
+  }
+  document.getElementById("copy-body").onclick = () => copyNode(document.getElementById("article"));
+  document.getElementById("copy-title").onclick = () => copyNode(document.getElementById("title"));
+</script>
+</body>
+</html>

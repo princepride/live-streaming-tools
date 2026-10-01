@@ -123,6 +123,14 @@ Every new blog must also be wired into the MkDocs site, or it stays unreachable 
 python -m mkdocs build --strict
 ```
 
+Also export the Zhihu copy page, which the site publishes beside the blog:
+
+```powershell
+python tools/zhihu_html.py <topic_slug>
+```
+
+It writes `tech_blog_output/<topic_slug>/zhihu.html`, served at `https://princepride.github.io/live-streaming-tools/<topic_slug>/zhihu.html`. Zhihu's document import drops images and styling, and it only re-hosts images pasted from a live web page, so readers copy from that published URL rather than a local file. Math becomes Zhihu equation images and images use absolute site URLs.
+
 MkDocs serves directory URLs, so `<topic_slug>/final/blog.md` publishes at `<topic_slug>/final/blog/` — the form the README must link to.
 
 Before finishing, check that every directory under `tech_blog_output/` holding a `final/blog.md` appears in both the `nav` and the homepage grid, and add any that earlier runs missed. `.github/workflows/pages.yml` rebuilds and deploys on push to `main` whenever `mkdocs.yml` or `tech_blog_output/**` changes; the site does not update until those changes are pushed.
