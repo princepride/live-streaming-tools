@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 16013,
+  "image_count": 8,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-07.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-17.png",
+    "assets/slides/slide-18.png",
+    "assets/slides/slide-20.png"
+  ],
+  "docx": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_fast_strong/final/blog.docx",
+    "size": 3279572,
+    "pass": true,
+    "paragraphs": 237,
+    "headings": 47,
+    "numbered_paragraphs": 56,
+    "tables": 11,
+    "embedded_images": 8,
+    "media_parts": 8,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_fast_strong/final/blog.pdf",
+    "size": 4865761,
+    "pass": true,
+    "pages": 19,
+    "encrypted": false,
+    "embedded_image_xobjects": 8,
+    "expected_images": 8,
+    "pages_without_extractable_text": [],
+    "title": "突破视频生成大模型的工程瓶颈：全链路推理加速与自动化实践",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 16013,
+      "translated_chars": 48537,
+      "source_images": 8,
+      "translated_images": 8,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": [
+        "2.5d",
+        "3d"
+      ]
+    },
+    "docx": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_fast_strong/final/blog.en.docx",
+      "size": 3280471,
+      "pass": true,
+      "paragraphs": 237,
+      "headings": 47,
+      "numbered_paragraphs": 56,
+      "tables": 11,
+      "embedded_images": 8,
+      "media_parts": 8,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/minimax_h3_fast_strong/final/blog.en.pdf",
+      "size": 4386564,
+      "pass": true,
+      "pages": 24,
+      "encrypted": false,
+      "embedded_image_xobjects": 8,
+      "expected_images": 8,
+      "pages_without_extractable_text": [],
+      "title": "Breaking the Engineering Bottlenecks of Video Generation Foundation Models: Full-Pipeline Inference Acceleration and Automation in Practice",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  }
+}

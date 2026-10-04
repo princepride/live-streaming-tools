@@ -54,6 +54,17 @@
     [阅读中文](vllm_request_journey/final/blog.md)
     · [English](vllm_request_journey/final/blog.en.md)
 
+-   <span class="article-kicker">VIDEO GENERATION · INFERENCE ACCELERATION</span>
+
+    **突破视频生成大模型的工程瓶颈：全链路推理加速与自动化实践**
+
+    ---
+
+    从超分路线、窗口注意力多卡切分与长视频续写出发，拆解 vLLM-Omni 为 MiniMax H3 做的稀疏注意力、投影缓存、输出传输优化与自动化编排。
+
+    [阅读中文](minimax_h3_fast_strong/final/blog.md)
+    · [English](minimax_h3_fast_strong/final/blog.en.md)
+
 -   <span class="article-kicker">RL TRAINING · NUMERICAL CONSISTENCY</span>
 
     **大模型强化学习后训练：如何通过 RL-Kernel 彻底消除训推 LogP 偏差**

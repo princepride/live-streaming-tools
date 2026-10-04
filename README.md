@@ -29,6 +29,7 @@
 | 18 | 基于 VeRL-Omni 的 MiniMax-H3 RL 后训练 | [BV1skYQ63EPW](https://www.bilibili.com/video/BV1skYQ63EPW) | [VeRL-Omni × MiniMax-H3 RL 课件](https://drive.google.com/file/d/1yIzssbjSZQOL8SQvLfjKb6ZyK_k2Tyeb/view) | [多模态强化学习工程解析：VeRL-Omni 架构与 MiniMax-H3 训练实录](https://princepride.github.io/live-streaming-tools/minimax_h3_verl_omni_rl/final/blog/) |
 | 19 | vLLM 语义路由器：探索多模型系统智能的边界 | [BV13Jeh68Eam](https://www.bilibili.com/video/BV13Jeh68Eam) | [vLLM-SR 课件](https://drive.google.com/file/d/1MbB4b1pPO_avIr52DxbxvXQdlvhfFxH7/view) | [混合模型系统构建：开源语义路由器的架构演进与工程实践](https://princepride.github.io/live-streaming-tools/vllm_semantic_router/final/blog/) |
 | 20 | RL-Kernel：大模型 RL 后训练中的训推一致性 | [BV1Ech96cEzW](https://www.bilibili.com/video/BV1Ech96cEzW) | [RL-Kernel v0.1.0 课件](https://drive.google.com/file/d/1geW-HDHSLrnhKV2gRz5q9JuSS1dCdE1z/view) | [大模型强化学习后训练：如何通过 RL-Kernel 彻底消除训推 LogP 偏差](https://princepride.github.io/live-streaming-tools/rl_kernel_train_infer_consistency/final/blog/) |
+| 21 | 让 MiniMax H3 又快，又强 | [BV115HY6tEmQ](https://www.bilibili.com/video/BV115HY6tEmQ) | [让 MiniMax-H3 又快又强 课件](https://drive.google.com/file/d/1P5PjY07maTLr2JqNuGFokC7vTpvflMqt/view) | [突破视频生成大模型的工程瓶颈：全链路推理加速与自动化实践](https://princepride.github.io/live-streaming-tools/minimax_h3_fast_strong/final/blog/) |
 
 ## 在线技术博客
 

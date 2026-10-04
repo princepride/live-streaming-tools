@@ -1091,7 +1091,13 @@ def translation_qa(source: str, translated: str) -> dict[str, Any]:
     translated_numbers = Counter(numbers(translated))
     # Repetition counts may legitimately change when English consolidates adjacent sentences.
     # Require every distinct explicit source number to remain present somewhere in the translation.
-    missing_numbers = sorted(set(source_numbers) - set(translated_numbers))
+    # A bare source number may gain a unit-like suffix in English ("2.5 次元" -> "2.5D");
+    # numbers that already carry a unit in the source must still match exactly.
+    missing_numbers = sorted(
+        number for number in set(source_numbers) - set(translated_numbers)
+        if not (re.fullmatch(r"\d+(?:\.\d+)?", number)
+                and any(re.fullmatch(re.escape(number) + r"[a-z]+", token) for token in translated_numbers))
+    )
     additional_numbers = sorted(set(translated_numbers) - set(source_numbers))
     source_tables = sum(1 for line in source.splitlines() if line.lstrip().startswith("|"))
     translated_tables = sum(1 for line in translated.splitlines() if line.lstrip().startswith("|"))

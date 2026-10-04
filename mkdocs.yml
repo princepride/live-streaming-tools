@@ -52,6 +52,7 @@ nav:
       - 从 Hugging Face 到 vLLM：一条可验证的模型接入链路: vllm_model_integration/final/blog.md
       - 从压缩注意力到可执行推理：DeepSeek V4 如何落入 vLLM: vllm_deepseek_v4_internals/final/blog.md
       - 从 HTTP 到下一枚 Token：vLLM 请求如何穿过三个执行边界: vllm_request_journey/final/blog.md
+      - 让 MiniMax-H3 又快又强：视频生成推理加速: minimax_h3_fast_strong/final/blog.md
       - RL-Kernel 训推一致性: rl_kernel_train_infer_consistency/final/blog.md
       - vLLM 语义路由器与混合模型系统: vllm_semantic_router/final/blog.md
       - VeRL-Omni 与 MiniMax-H3 多模态 RL 后训练: minimax_h3_verl_omni_rl/final/blog.md
@@ -73,6 +74,7 @@ nav:
       - From Hugging Face to vLLM - A Verifiable Model Integration Pipeline: vllm_model_integration/final/blog.en.md
       - From Compressed Attention to Executable Inference - How DeepSeek V4 Lands in vLLM: vllm_deepseek_v4_internals/final/blog.en.md
       - From HTTP to the Next Token - How a vLLM Request Crosses Three Execution Boundaries: vllm_request_journey/final/blog.en.md
+      - Making MiniMax-H3 Faster and Stronger - Video Generation Inference Acceleration: minimax_h3_fast_strong/final/blog.en.md
       - RL-Kernel Train-Inference Consistency: rl_kernel_train_infer_consistency/final/blog.en.md
       - vLLM Semantic Router and Hybrid Model Systems: vllm_semantic_router/final/blog.en.md
       - Multimodal RL Post-Training with VeRL-Omni and MiniMax-H3: minimax_h3_verl_omni_rl/final/blog.en.md
