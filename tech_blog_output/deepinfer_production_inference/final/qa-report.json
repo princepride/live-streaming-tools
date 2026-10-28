@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 17909,
+  "image_count": 12,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-03.png",
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-14.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-19.png",
+    "assets/slides/slide-23.png",
+    "assets/slides/slide-24.png",
+    "assets/slides/slide-25.png",
+    "assets/slides/slide-29.png",
+    "assets/slides/slide-31.png"
+  ],
+  "english": {
+    "docx": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/deepinfer_production_inference/final/blog.en.docx",
+      "size": 3101384,
+      "pass": true,
+      "paragraphs": 231,
+      "headings": 45,
+      "numbered_paragraphs": 50,
+      "tables": 10,
+      "embedded_images": 12,
+      "media_parts": 12,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/deepinfer_production_inference/final/blog.en.pdf",
+      "size": 3579062,
+      "pass": true,
+      "pages": 23,
+      "encrypted": false,
+      "embedded_image_xobjects": 12,
+      "expected_images": 12,
+      "pages_without_extractable_text": [],
+      "title": "DeepInfer Inference Architecture Explained: EPD Disaggregation, KV Pooling, and Load Balancing",
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 17710,
+      "translated_chars": 47208,
+      "source_images": 12,
+      "translated_images": 12,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    }
+  },
+  "manual_editorial_review": {
+    "pass": true,
+    "date": "2026-10-28",
+    "scope": "Checked source scope, execution boundaries, historical examples, and bilingual factual edits."
+  },
+  "docx": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/deepinfer_production_inference/final/blog.docx",
+    "size": 3101409,
+    "pass": true,
+    "paragraphs": 231,
+    "headings": 45,
+    "numbered_paragraphs": 50,
+    "tables": 10,
+    "embedded_images": 12,
+    "media_parts": 12,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/deepinfer_production_inference/final/blog.pdf",
+    "size": 4062784,
+    "pass": true,
+    "pages": 20,
+    "encrypted": false,
+    "embedded_image_xobjects": 12,
+    "expected_images": 12,
+    "pages_without_extractable_text": [],
+    "title": "DeepInfer 推理架构解析：EPD 分离、KV 池化与负载均衡",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "visual_qa": {
+    "pdf": {
+      "pass": true,
+      "scope": "All pages of both language PDFs reviewed after final layout fixes."
+    },
+    "docx": {
+      "status": "not_run",
+      "reason": "Required bundled DOCX renderer unavailable; structural audits passed."
+    }
+  }
+}

@@ -21,6 +21,39 @@
 
 <div class="grid cards" markdown>
 
+-   <span class="article-kicker">PRODUCTION INFERENCE · DISAGGREGATION</span>
+
+    **DeepInfer 推理架构解析：EPD 分离、KV 池化与负载均衡**
+
+    ---
+
+    从编码、Prefill 与 Decode 分离出发，解析 KV 缓存池化、分层存储、专家负载均衡与调度策略在 DeepInfer 中的协同关系。
+
+    [阅读中文](deepinfer_production_inference/final/blog.md)
+    · [English](deepinfer_production_inference/final/blog.en.md)
+
+-   <span class="article-kicker">REALTIME INTERACTION · FULL DUPLEX</span>
+
+    **vLLM-Omni 全双工会话：模型执行、打断控制与性能优化**
+
+    ---
+
+    从边听边说的交互需求出发，拆解原生双工与轮次式执行、会话编排、VAD 打断、性能指标和多阶段模型接入。
+
+    [阅读中文](vllm_omni_full_duplex/final/blog.md)
+    · [English](vllm_omni_full_duplex/final/blog.en.md)
+
+-   <span class="article-kicker">AI INFRA · LEARNING PATH</span>
+
+    **AI Infra 入门与 vLLM 开源贡献：算力、源码阅读与协作流程**
+
+    ---
+
+    围绕算力、基础知识、推理框架和社区协作，整理从学习 PagedAttention 到提交首个可审查 PR 的实践路径。
+
+    [阅读中文](vllm_beginner_qa/final/blog.md)
+    · [English](vllm_beginner_qa/final/blog.en.md)
+
 -   <span class="article-kicker">MODEL INTEGRATION · TENSOR PARALLELISM</span>
 
     **从 Hugging Face 到 vLLM：一条可验证的模型接入链路**

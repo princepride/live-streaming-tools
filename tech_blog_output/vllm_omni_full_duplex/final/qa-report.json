@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 19071,
+  "image_count": 8,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-04.png",
+    "assets/slides/slide-07.png",
+    "assets/slides/slide-09.png",
+    "assets/slides/slide-11.png",
+    "assets/slides/slide-13.png",
+    "assets/slides/slide-16.png",
+    "assets/slides/slide-18.png",
+    "assets/slides/slide-19.png"
+  ],
+  "english": {
+    "docx": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_omni_full_duplex/final/blog.en.docx",
+      "size": 3034805,
+      "pass": true,
+      "paragraphs": 241,
+      "headings": 54,
+      "numbered_paragraphs": 65,
+      "tables": 10,
+      "embedded_images": 8,
+      "media_parts": 8,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_omni_full_duplex/final/blog.en.pdf",
+      "size": 3980774,
+      "pass": true,
+      "pages": 24,
+      "encrypted": false,
+      "embedded_image_xobjects": 8,
+      "expected_images": 8,
+      "pages_without_extractable_text": [],
+      "title": "Full-Duplex Sessions in vLLM-Omni: Model Execution, Interruption Control, and Performance",
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 18892,
+      "translated_chars": 52077,
+      "source_images": 8,
+      "translated_images": 8,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": [
+        "07"
+      ]
+    }
+  },
+  "manual_editorial_review": {
+    "pass": true,
+    "date": "2026-10-28",
+    "scope": "Checked source scope, execution boundaries, historical examples, and bilingual factual edits."
+  },
+  "docx": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_omni_full_duplex/final/blog.docx",
+    "size": 3034416,
+    "pass": true,
+    "paragraphs": 241,
+    "headings": 54,
+    "numbered_paragraphs": 65,
+    "tables": 10,
+    "embedded_images": 8,
+    "media_parts": 8,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_omni_full_duplex/final/blog.pdf",
+    "size": 4442025,
+    "pass": true,
+    "pages": 20,
+    "encrypted": false,
+    "embedded_image_xobjects": 8,
+    "expected_images": 8,
+    "pages_without_extractable_text": [],
+    "title": "vLLM-Omni 全双工会话：模型执行、打断控制与性能优化",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "visual_qa": {
+    "pdf": {
+      "pass": true,
+      "scope": "All pages of both language PDFs reviewed after final layout fixes."
+    },
+    "docx": {
+      "status": "not_run",
+      "reason": "Required bundled DOCX renderer unavailable; structural audits passed."
+    }
+  }
+}

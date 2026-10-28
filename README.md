@@ -30,6 +30,9 @@
 | 19 | vLLM 语义路由器：探索多模型系统智能的边界 | [BV13Jeh68Eam](https://www.bilibili.com/video/BV13Jeh68Eam) | [vLLM-SR 课件](https://drive.google.com/file/d/1MbB4b1pPO_avIr52DxbxvXQdlvhfFxH7/view) | [混合模型系统构建：开源语义路由器的架构演进与工程实践](https://princepride.github.io/live-streaming-tools/vllm_semantic_router/final/blog/) |
 | 20 | RL-Kernel：大模型 RL 后训练中的训推一致性 | [BV1Ech96cEzW](https://www.bilibili.com/video/BV1Ech96cEzW) | [RL-Kernel v0.1.0 课件](https://drive.google.com/file/d/1geW-HDHSLrnhKV2gRz5q9JuSS1dCdE1z/view) | [大模型强化学习后训练：如何通过 RL-Kernel 彻底消除训推 LogP 偏差](https://princepride.github.io/live-streaming-tools/rl_kernel_train_infer_consistency/final/blog/) |
 | 21 | 让 MiniMax H3 又快，又强 | [BV115HY6tEmQ](https://www.bilibili.com/video/BV115HY6tEmQ) | [让 MiniMax-H3 又快又强 课件](https://drive.google.com/file/d/1P5PjY07maTLr2JqNuGFokC7vTpvflMqt/view) | [突破视频生成大模型的工程瓶颈：全链路推理加速与自动化实践](https://princepride.github.io/live-streaming-tools/minimax_h3_fast_strong/final/blog/) |
+| 22 | vLLM-Omni 如何让模型边听边说 | [BV1zRpg6REeh](https://www.bilibili.com/video/BV1zRpg6REeh) | [vLLM-Omni 全双工交互课件](https://drive.google.com/file/d/1Dh7w6MxO5QQ2HKgsNo8djFoKWIuBBrNw/view) | [vLLM-Omni 全双工会话：模型执行、打断控制与性能优化](https://princepride.github.io/live-streaming-tools/vllm_omni_full_duplex/final/blog/) |
+| 23 | 拆解 DeepSeek 生产推理架构：从 DeepInfer 源码到技术报告 | [BV1cgHP6BEp1](https://www.bilibili.com/video/BV1cgHP6BEp1) | [DeepInfer 推理系统拆解课件](https://drive.google.com/file/d/1ZKrCY7Q_RAhPXJ1Qy0WGxWClWIEy-wua/view) | [DeepInfer 推理架构解析：EPD 分离、KV 池化与负载均衡](https://princepride.github.io/live-streaming-tools/deepinfer_production_inference/final/blog/) |
+| 24 | AI Infra 新手答疑：vLLM 从入门到精通 | [BV1nEYv6XE15](https://www.bilibili.com/video/BV1nEYv6XE15) | [AI Infra 新手答疑资料目录](https://drive.google.com/drive/folders/1IgC1258EOrsSughkngg_iNLiqs_d0AvR) | [AI Infra 入门与 vLLM 开源贡献：算力、源码阅读与协作流程](https://princepride.github.io/live-streaming-tools/vllm_beginner_qa/final/blog/) |
 
 ## 在线技术博客
 

@@ -49,6 +49,9 @@ nav:
   - 互动工具:
       - 并行切分可视化 · Parallelism Explorer: parallelism_explorer/index.md
   - 中文博客:
+      - "DeepInfer 推理架构解析：EPD 分离、KV 池化与负载均衡": deepinfer_production_inference/final/blog.md
+      - "vLLM-Omni 全双工会话：模型执行、打断控制与性能优化": vllm_omni_full_duplex/final/blog.md
+      - "AI Infra 入门与 vLLM 开源贡献：算力、源码阅读与协作流程": vllm_beginner_qa/final/blog.md
       - 从 Hugging Face 到 vLLM：一条可验证的模型接入链路: vllm_model_integration/final/blog.md
       - 从压缩注意力到可执行推理：DeepSeek V4 如何落入 vLLM: vllm_deepseek_v4_internals/final/blog.md
       - 从 HTTP 到下一枚 Token：vLLM 请求如何穿过三个执行边界: vllm_request_journey/final/blog.md
@@ -71,6 +74,9 @@ nav:
       - vLLM 低比特量化实践：AutoRound: auto_round_vllm_vlm_low_bit/final/blog.md
       - GLM-5 昇腾推理优化: ascend_glm5_deployment/final/blog.md
   - English:
+      - "DeepInfer Inference Architecture Explained: EPD Disaggregation, KV Pooling, and Load Balancing": deepinfer_production_inference/final/blog.en.md
+      - "Full-Duplex Sessions in vLLM-Omni: Model Execution, Interruption Control, and Performance": vllm_omni_full_duplex/final/blog.en.md
+      - "Getting Started with AI Infra and Contributing to vLLM: Compute Resources, Source Code Reading, and Collaboration Workflows": vllm_beginner_qa/final/blog.en.md
       - From Hugging Face to vLLM - A Verifiable Model Integration Pipeline: vllm_model_integration/final/blog.en.md
       - From Compressed Attention to Executable Inference - How DeepSeek V4 Lands in vLLM: vllm_deepseek_v4_internals/final/blog.en.md
       - From HTTP to the Next Token - How a vLLM Request Crosses Three Execution Boundaries: vllm_request_journey/final/blog.en.md

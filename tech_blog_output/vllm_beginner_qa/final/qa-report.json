@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "pass": true,
+  "article_chars": 10994,
+  "image_count": 1,
+  "missing_images": [],
+  "placeholders": [],
+  "heading_jumps": [],
+  "reference_8gram_overlaps": [],
+  "review_pass": true,
+  "severe_review_issues": [],
+  "notes": [
+    "8-gram 命中用于人工复核；技术术语造成的命中不自动判定抄袭。"
+  ],
+  "packaged_assets": [
+    "assets/slides/slide-01.png"
+  ],
+  "docx": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_beginner_qa/final/blog.docx",
+    "size": 347500,
+    "pass": true,
+    "paragraphs": 185,
+    "headings": 38,
+    "numbered_paragraphs": 29,
+    "tables": 8,
+    "embedded_images": 1,
+    "media_parts": 1,
+    "zip_integrity": "pass",
+    "table_geometry": "pass",
+    "images_missing_alt": [],
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "pdf": {
+    "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_beginner_qa/final/blog.pdf",
+    "size": 888855,
+    "pass": true,
+    "pages": 11,
+    "encrypted": false,
+    "embedded_image_xobjects": 1,
+    "expected_images": 1,
+    "pages_without_extractable_text": [],
+    "title": "AI Infra 入门与 vLLM 开源贡献：算力、源码阅读与协作流程",
+    "visual_render_qa": "not_run_by_pipeline"
+  },
+  "english": {
+    "translation": {
+      "pass": true,
+      "checks": {
+        "image_paths_preserved": true,
+        "heading_levels_preserved": true,
+        "code_fences_preserved": true,
+        "table_rows_preserved": true,
+        "numeric_anchors_preserved": true,
+        "substantial_length": true,
+        "no_untranslated_chinese": true
+      },
+      "issues": [],
+      "source_chars": 10807,
+      "translated_chars": 30600,
+      "source_images": 1,
+      "translated_images": 1,
+      "remaining_chinese_chars": 0,
+      "missing_numeric_tokens": [],
+      "additional_numeric_tokens": []
+    },
+    "docx": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_beginner_qa/final/blog.en.docx",
+      "size": 347614,
+      "pass": true,
+      "paragraphs": 188,
+      "headings": 38,
+      "numbered_paragraphs": 29,
+      "tables": 8,
+      "embedded_images": 1,
+      "media_parts": 1,
+      "zip_integrity": "pass",
+      "table_geometry": "pass",
+      "images_missing_alt": [],
+      "visual_render_qa": "not_run_by_pipeline"
+    },
+    "pdf": {
+      "path": "/Users/princepride/Documents/inferact/live-streaming-tools/tech_blog_output/vllm_beginner_qa/final/blog.en.pdf",
+      "size": 493551,
+      "pass": true,
+      "pages": 14,
+      "encrypted": false,
+      "embedded_image_xobjects": 1,
+      "expected_images": 1,
+      "pages_without_extractable_text": [],
+      "title": "Getting Started with AI Infra and Contributing to vLLM: Compute Resources, Source Code Reading, and Collaboration Workflows",
+      "visual_render_qa": "not_run_by_pipeline"
+    }
+  },
+  "manual_editorial_review": {
+    "pass": true,
+    "date": "2026-10-28",
+    "scope": "Checked source scope, execution boundaries, historical examples, and bilingual factual edits."
+  },
+  "visual_qa": {
+    "pdf": {
+      "pass": true,
+      "scope": "All pages of both language PDFs reviewed after final layout fixes."
+    },
+    "docx": {
+      "status": "not_run",
+      "reason": "Required bundled DOCX renderer unavailable; structural audits passed."
+    }
+  }
+}
